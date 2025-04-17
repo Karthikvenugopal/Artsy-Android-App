@@ -14,4 +14,15 @@ interface ArtsyApiService {
     suspend fun getArtistDetail(
         @Path("id") artistId: String
     ): Response<ArtistDetailResponse>
+
+    @GET("api/artists/artwork/{artist_id}")
+    suspend fun getArtworks(
+        @Path("artist_id") artistId: String
+    ): Response<ArtworkSearchResponse>
+
+    @GET("api/artists/similar/{artist_id}")
+    suspend fun getSimilar(
+        @Path("artist_id") artistId: String
+    ): Response<ArtistSearchResponse>
+
 }
