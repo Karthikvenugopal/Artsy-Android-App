@@ -1,7 +1,9 @@
 package com.example.artsyandroid.network
 
 import retrofit2.Response
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 
 interface ArtsyApiService {
@@ -25,4 +27,14 @@ interface ArtsyApiService {
         @Path("artist_id") artistId: String
     ): Response<ArtistSearchResponse>
 
+    @GET("api/artists/genes/{artwork_id}")
+    suspend fun getGenes(
+        @Path("artwork_id") artworkId: String
+    ): Response<GeneSearchResponse>
+
+    @POST("api/auth/login")
+    suspend fun login(@Body req: LoginRequest): Response<AuthResponse>
+
+    @POST("api/auth/register")
+    suspend fun register(@Body req: RegisterRequest): Response<AuthResponse>
 }

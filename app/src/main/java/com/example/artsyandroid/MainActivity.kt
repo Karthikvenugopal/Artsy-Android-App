@@ -3,11 +3,19 @@ package com.example.artsyandroid
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.example.artsyandroid.network.RetrofitInstance
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        setTheme(R.style.Theme_ArtsyAndroid)  // note the underscore in generated R.style
+        // Apply the theme first
+        setTheme(R.style.Theme_ArtsyAndroid)
         super.onCreate(savedInstanceState)
-        setContent { MyApp() }
+
+        // Initialize RetrofitInstance.api with Auth interceptor
+        RetrofitInstance.init(this)
+
+        setContent {
+            MyApp()
+        }
     }
 }

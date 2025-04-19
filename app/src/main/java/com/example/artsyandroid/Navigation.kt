@@ -51,25 +51,43 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
-
+import com.example.artsyandroid.network.Gene
+import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.AccountBox
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.window.DialogProperties
+import com.example.artsyandroid.auth.AuthManager
+import com.example.artsyandroid.network.LoginRequest
+import com.example.artsyandroid.network.RegisterRequest
 
 
 @Composable
 fun MyApp() {
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = "splash") {
-        composable("splash") { SplashScreen(navController) }
-        composable("home") { HomeScreen(navController) }
-        composable("search") { SearchScreen(navController) }
+    NavHost(navController, startDestination = "splash") {
+        composable("splash")  { SplashScreen(navController) }
+        composable("home")    { HomeScreen(navController) }
+        composable("search")  { SearchScreen(navController) }
+        composable("login")   { LoginScreen(navController) }
+        composable("register"){ RegisterScreen(navController) }
         composable(
             "artistDetail/{artistId}",
-            arguments = listOf(navArgument("artistId") { type = NavType.StringType; defaultValue = "" })
+            arguments = listOf(navArgument("artistId"){ type = NavType.StringType })
         ) { backStackEntry ->
-            val artistId = backStackEntry.arguments?.getString("artistId") ?: ""
-            ArtistDetailScreen(artistId, navController)
+            ArtistDetailScreen(
+                backStackEntry.arguments!!.getString("artistId")!!,
+                navController
+            )
         }
     }
 }
+
 
 @Composable
 fun SplashScreen(navController: NavController) {
@@ -97,7 +115,7 @@ fun SplashScreen(navController: NavController) {
 @Composable
 fun HomeScreen(navController: NavController) {
     val context = LocalContext.current
-
+    val loggedIn   = AuthManager.isLoggedIn()
     // 1) Date formatting
     val todayString = remember {
         LocalDate.now().format(DateTimeFormatter.ofPattern("d MMMM yyyy"))
@@ -148,8 +166,8 @@ fun HomeScreen(navController: NavController) {
                                 Icon(Icons.Default.Search, contentDescription = null)
                             },
                             trailingIcon = {
-                                    IconButton(onClick = { query = "" }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Clear")
+                                IconButton(onClick = { query = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear")
 
                                 }
                             },
@@ -163,7 +181,9 @@ fun HomeScreen(navController: NavController) {
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
-                        Text("Artist Search", modifier = Modifier.fillMaxWidth().padding(start = 4.dp), textAlign = TextAlign.Start)
+                        Text("Artist Search", modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 4.dp), textAlign = TextAlign.Start)
                     }
                 },
                 actions = {
@@ -217,7 +237,9 @@ fun HomeScreen(navController: NavController) {
                     Text(
                         text = todayString,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.align(Alignment.Start).padding(start = 16.dp)
+                        modifier = Modifier
+                            .align(Alignment.Start)
+                            .padding(start = 16.dp)
                     )
                     Spacer(Modifier.height(4.dp))
 
@@ -230,15 +252,27 @@ fun HomeScreen(navController: NavController) {
                             "Favorites",
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier.padding(vertical = 2.dp).fillMaxWidth()
+                            modifier = Modifier
+                                .padding(vertical = 2.dp)
+                                .fillMaxWidth()
                         )
                     }
 
                     Spacer(Modifier.height(40.dp))
 //Added style
                     // Login button
-                    Button(onClick = { /* TODO */ }) {
-                        Text("Log in to see favorites")
+                    if (!loggedIn)
+                    {
+                        Button(
+                            onClick = {
+                                navController.navigate("login")
+                            }
+                        ) {
+                            Text("Log in to see favorites")
+                        }
+                    } else {
+                        // TODO: replace this with your real favorites UI
+                        Text("No favorites yet", style = MaterialTheme.typography.bodyLarge)
                     }
 
                     Spacer(Modifier.height(40.dp))
@@ -415,45 +449,55 @@ fun SearchScreen(navController: NavController) {
 }
 
 @Composable
-fun ArtistDetailScreen(artistId: String, navController: NavController) {
-    Log.d("ArtistDetail", "ArtistDetailScreen launched with artistId: $artistId")
+fun ArtistDetailScreen(
+    artistId: String,
+    navController: NavController,
+    isLoggedIn: Boolean = false // ← hook this up to your real login state
+) {
     var artistDetail by remember { mutableStateOf<ArtistDetailResponse?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
+    var isLoading    by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf("") }
 
     LaunchedEffect(artistId) {
         try {
-            val response = RetrofitInstance.api.getArtistDetail(artistId)
-            Log.d("ArtistDetail", "Response: ${response.body()}")
-            if (response.isSuccessful) {
-                artistDetail = response.body()
-            } else {
-                errorMessage = "Error fetching artist details (Status: ${response.code()})"
-            }
+            val resp = RetrofitInstance.api.getArtistDetail(artistId)
+            if (resp.isSuccessful)  artistDetail = resp.body()
+            else                   errorMessage = "Error ${resp.code()}"
         } catch (e: Exception) {
             errorMessage = e.message ?: "Unknown error"
-            Log.e("ArtistDetail", "Exception: ${e.localizedMessage}")
         } finally {
             isLoading = false
         }
     }
-    var tabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Details", "Artworks", "Similar")
 
-    Column {
-        TabRow(selectedTabIndex = tabIndex) {
-            tabs.forEachIndexed { i, title ->
-                Tab(
-                    selected = i == tabIndex,
-                    onClick = { tabIndex = i },
-                    text = { Text(title) }
-                )
+    var tabIndex by remember { mutableStateOf(0) }
+    val tabs = listOf(
+        Icons.Outlined.Info        to "Details",
+        Icons.Outlined.AccountBox  to "Artworks",
+        Icons.Default.ThumbUp      to "Similar"
+    ).let {
+        if (!isLoggedIn) it.dropLast(1) else it
+    }
+
+    TabRow(selectedTabIndex = tabIndex) {
+        tabs.forEachIndexed { index, pair ->
+            val (icon, label) = pair
+            Tab(
+                selected = index == tabIndex,
+                onClick  = { tabIndex = index }
+            ) {
+                Column(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector   = icon,
+                        contentDescription = label
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(label, style = MaterialTheme.typography.labelSmall)
+                }
             }
-        }
-        when (tabIndex) {
-            0 -> DetailsTab(artistDetail)
-            1 -> ArtworksTab(artistId)
-            2 -> SimilarTab(artistId, navController)
         }
     }
 
@@ -470,10 +514,7 @@ fun ArtistDetailScreen(artistId: String, navController: NavController) {
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -483,56 +524,76 @@ fun ArtistDetailScreen(artistId: String, navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.TopCenter
         ) {
             when {
-                isLoading -> CircularProgressIndicator()
-                errorMessage.isNotEmpty() -> Text(text = errorMessage)
-                artistDetail != null -> Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Name: ${artistDetail?.name.orEmpty()}",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                    Text(
-                        text = "Nationality: ${artistDetail?.nationality.orEmpty()}",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = "Birthday: ${artistDetail?.birthday.orEmpty()}",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    if (!artistDetail?.deathday.isNullOrEmpty()) {
-                        Text(
-                            text = "Deathday: ${artistDetail?.deathday}",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                errorMessage.isNotEmpty() -> Text(errorMessage, modifier = Modifier.align(Alignment.Center))
+                artistDetail != null -> Column {
+                    // the tabs
+                    TabRow(selectedTabIndex = tabIndex) {
+                        tabs.forEachIndexed { i, (icon, label) ->
+                            Tab(
+                                selected = i == tabIndex,
+                                onClick  = { tabIndex = i }
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(icon, contentDescription = label)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(label, style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
                     }
-                    Text(
-                        text = "Biography: ${artistDetail?.biography.orEmpty()}",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+
+                    // the tab content
+                    when (tabIndex) {
+                        0 -> DetailsTab(artistDetail!!)
+                        1 -> ArtworksTab(artistId)
+                        2 -> if (isLoggedIn) SimilarTab(artistId, navController)
+                    }
                 }
-                else -> Text(text = "No data available")
             }
         }
     }
 }
 
+
 @Composable
 fun DetailsTab(detail: ArtistDetailResponse?) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
     ) {
         item {
             detail?.let { d ->
-                Text("Name: ${d.name.orEmpty()}", style = MaterialTheme.typography.headlineSmall)
-                Text("Nationality: ${d.nationality.orEmpty()}", style = MaterialTheme.typography.bodyMedium)
-                Text("Birthday: ${d.birthday.orEmpty()}", style = MaterialTheme.typography.bodyMedium)
-                d.deathday?.takeIf { it.isNotBlank() }?.let {
-                    Text("Deathday: $it", style = MaterialTheme.typography.bodyMedium)
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(d.biography.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = d.name.orEmpty(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "${d.nationality.orEmpty()}, ${d.birthday.orEmpty()} – ${d.deathday.orEmpty()}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = d.biography.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start  // or Center if you prefer
+                )
             }
         }
     }
@@ -544,8 +605,17 @@ fun DetailsTab(detail: ArtistDetailResponse?) {
 @Composable
 fun ArtworksTab(artistId: String) {
     var artworks by remember { mutableStateOf<List<Artwork>>(emptyList()) }
-    var loading  by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(true) }
 
+    // state for the categories dialog:
+    var showGenesDialog by remember { mutableStateOf(false) }
+    var selectedArtworkId by remember { mutableStateOf<String?>(null) }
+    var genesLoading by remember { mutableStateOf(false) }
+    var genes by remember { mutableStateOf<List<Gene>>(emptyList()) }
+
+//    val scope = rememberCoroutineScope()
+
+    // 1) load artworks on first composition:
     LaunchedEffect(artistId) {
         try {
             val resp = RetrofitInstance.api.getArtworks(artistId)
@@ -560,33 +630,222 @@ fun ArtworksTab(artistId: String) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
-    } else {
-        LazyColumn(Modifier.fillMaxSize().padding(8.dp)) {
-            items(artworks) { art ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(4.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    Column(Modifier.padding(8.dp)) {
-                        AsyncImage(
-                            model = art.links.image?.href
-                                ?.replace("{image_version}", "medium"), // pick a version
-                            contentDescription = art.title,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(art.title, style = MaterialTheme.typography.bodyLarge)
+        return
+    }
+
+    if (artworks.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "No Artworks",
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+        return
+    }
+
+
+    LazyColumn(Modifier
+        .fillMaxSize()
+        .padding(8.dp)) {
+        items(artworks) { art ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp),
+                elevation = CardDefaults.cardElevation(4.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column {
+                    AsyncImage(
+                        model = art.links.image
+                            ?.href
+                            ?.replace("{image_version}", "medium"),
+                        contentDescription = art.title,
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        contentScale = ContentScale.FillWidth
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = art.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Button(
+                        onClick = {
+                            selectedArtworkId = art.id
+                            showGenesDialog = true
+                        },
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .align(Alignment.CenterHorizontally)
+                    ) {
+                        Text("View categories")
                     }
                 }
             }
         }
     }
+
+    // 4) The categories dialog:
+    if (showGenesDialog && selectedArtworkId != null) {
+        LaunchedEffect(selectedArtworkId) {
+            genesLoading = true
+            genes = try {
+                val resp = RetrofitInstance.api.getGenes(selectedArtworkId!!)
+                resp.body()?.embedded?.genes.orEmpty()
+            } catch (_: Exception) {
+                emptyList()
+            } finally {
+                genesLoading = false
+            }
+        }
+
+        // inside ArtworksTab, replace the existing AlertDialog with:
+
+        if (showGenesDialog && selectedArtworkId != null) {
+            // load genes as you already do…
+            LaunchedEffect(selectedArtworkId) {
+                genesLoading = true
+                genes = try {
+                    RetrofitInstance.api.getGenes(selectedArtworkId!!)
+                        .body()
+                        ?.embedded
+                        ?.genes
+                        .orEmpty()
+                } catch (_: Exception) {
+                    emptyList()
+                } finally {
+                    genesLoading = false
+                }
+            }
+
+            // state to track which gene is showing
+            var geneIndex by remember { mutableStateOf(0) }
+
+//            val configuration = LocalConfiguration.current
+
+            // In ArtworksTab composable - Updated AlertDialog section
+            if (showGenesDialog && selectedArtworkId != null) {
+
+                // at the top of your ArtworksTab, grab screen dims:
+                val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+                val dialogHeight = screenHeight * 0.75f
+                val carouselHeight = dialogHeight * 0.8f
+
+                AlertDialog(
+                    onDismissRequest = { showGenesDialog = false },
+                    properties = DialogProperties(usePlatformDefaultWidth = false),
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(dialogHeight),
+                    title = {
+                        Text(
+                            "Categories",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
+                    },
+                    text = {
+                        if (genesLoading) {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
+                        } else if (genes.isEmpty()) {
+                            Text("No Categories Found")
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(carouselHeight),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { geneIndex = (geneIndex - 1 + genes.size) % genes.size },
+                                    enabled = genes.size > 1
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .padding(horizontal = 4.dp),
+                                    elevation = CardDefaults.cardElevation(4.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .verticalScroll(rememberScrollState())
+                                    ) {
+                                        AsyncImage(
+                                            model = genes[geneIndex].links.thumbnail?.href,
+                                            contentDescription = genes[geneIndex].name,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(180.dp),
+                                            contentScale = ContentScale.Crop,
+                                            placeholder = painterResource(R.drawable.artsy_logo),
+                                            error       = painterResource(R.drawable.artsy_logo)
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            text = genes[geneIndex].name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 16.dp)
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = genes[geneIndex].description.orEmpty(),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            textAlign = TextAlign.Justify,
+                                            modifier = Modifier.padding(horizontal = 16.dp)
+                                        )
+                                        Spacer(Modifier.weight(1f)) // empty space if description is short
+                                    }
+                                }
+
+                                IconButton(
+                                    onClick = { geneIndex = (geneIndex + 1) % genes.size },
+                                    enabled = genes.size > 1
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next")
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Button(
+                                onClick = { showGenesDialog = false },
+                                modifier = Modifier.padding(8.dp)
+                            ) {
+                                Text("Close")
+                            }
+                        }
+                    }
+                )
+
+            }
+        }
+
+    }
 }
+
+
 
 
 @Composable
@@ -612,7 +871,9 @@ fun SimilarTab(
             CircularProgressIndicator()
         }
     } else {
-        LazyColumn(Modifier.fillMaxSize().padding(8.dp)) {
+        LazyColumn(Modifier
+            .fillMaxSize()
+            .padding(8.dp)) {
             items(similars) { artist ->
                 Card(
                     Modifier
@@ -634,8 +895,181 @@ fun SimilarTab(
                                 .clip(RoundedCornerShape(4.dp))
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(artist.title.orEmpty(), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = artist.title.orEmpty(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier
+                                .background(
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LoginScreen(navController: NavController) {
+    var email    by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var error    by remember { mutableStateOf<String?>(null) }
+    val scope    = rememberCoroutineScope()
+
+    Scaffold(topBar = {
+        TopAppBar(title = { Text("Log In") }, navigationIcon = {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+        })
+    }) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .padding(padding),
+            verticalArrangement = Arrangement.Center
+        ) {
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            error?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(16.dp))
+            val context = LocalContext.current
+            Button(onClick = {
+                scope.launch {
+                    try {
+                        val resp = RetrofitInstance.api.login(LoginRequest(email, password))
+                        if (resp.isSuccessful) {
+                            val auth = resp.body()!!
+                            // 1) Persist the token:
+                            AuthManager.saveToken(context, auth.token)
+                            //    e.g. save auth.token into DataStore or SharedPreferences
+                            // 2) Navigate back to home:
+
+                            navController.navigate("home") {
+                                popUpTo("home") { inclusive = true }
+                            }
+                        } else {
+                            error = resp.errorBody()?.string() ?: "Login failed"
+                        }
+                    } catch (e: Exception) {
+                        error = "Network error: ${e.message}"
                     }
+                }
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("Log In")
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                TextButton(onClick = { navController.navigate("register") }) {
+                    Text("Don't have an account? Register")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RegisterScreen(navController: NavController) {
+    var fullName by remember { mutableStateOf("") }
+    var email    by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var error    by remember { mutableStateOf<String?>(null) }
+    val scope    = rememberCoroutineScope()
+
+    Scaffold(topBar = {
+        TopAppBar(title = { Text("Register") }, navigationIcon = {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+        })
+    }) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .padding(padding),
+            verticalArrangement = Arrangement.Center
+        ) {
+            OutlinedTextField(
+                value = fullName,
+                onValueChange = { fullName = it },
+                label = { Text("Full Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            error?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = {
+                scope.launch {
+                    try {
+                        val resp = RetrofitInstance.api.register(RegisterRequest(fullName, email, password))
+                        if (resp.isSuccessful) {
+                            val auth = resp.body()!!
+                            Log.d("RegisterScreen", "auth: $auth")
+                            // persist auth.token …
+                            navController.navigate("home") {
+                                popUpTo("home") { inclusive = true }
+                            }
+                        } else {
+                            error = resp.errorBody()?.string() ?: "Registration failed"
+                        }
+                    } catch (e: Exception) {
+                        error = "Network error: ${e.message}"
+                    }
+                }
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("Register")
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                TextButton(onClick = { navController.navigate("login") }) {
+                    Text("Already have an account? Log In")
                 }
             }
         }
