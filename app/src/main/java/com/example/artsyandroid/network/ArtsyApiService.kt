@@ -26,7 +26,7 @@ interface ArtsyApiService {
     @GET("api/artists/similar/{artist_id}")
     suspend fun getSimilar(
         @Path("artist_id") artistId: String
-    ): Response<ArtistSearchResponse>
+    ): Response<SimilarArtistsResponse>
 
     @GET("api/artists/genes/{artwork_id}")
     suspend fun getGenes(

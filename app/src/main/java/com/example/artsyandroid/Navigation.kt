@@ -616,6 +616,20 @@ fun ArtistDetailScreen(
         }
     }
 
+    var favorites by remember { mutableStateOf<List<FavoriteItem>>(emptyList()) }
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) {
+            favorites = try {
+                RetrofitInstance.api.getFavorites().body()?.favorites.orEmpty()
+            } catch(_: Exception) {
+                emptyList()
+            }
+        }
+    }
+    val favoriteIds by remember(favorites) {
+        derivedStateOf { favorites.map { it.artistId }.toSet() }
+    }
+
     // Define tabs structure with icon painter
     data class TabItem(
         val icon: @Composable () -> Unit,  // Changed to composable icon
@@ -679,10 +693,15 @@ fun ArtistDetailScreen(
                                     .toggleFavorite(FavoriteRequest(artistId))
 
                                 if (resp.isSuccessful) {
-                                    // flip the local state
-                                    isFav = !isFav
-                                    val msg = if (isFav) "Added to favorites" else "Removed from favorites"
-                                    snackbarHostState.showSnackbar(msg)
+                                    // 1) refresh your full favorites list:
+                                    favorites = resp.body()?.favorites.orEmpty()
+
+                                    // 2) recompute the detail‐screen star state
+                                    isFav = artistId in favorites.map { it.artistId }
+
+                                    snackbarHostState.showSnackbar(
+                                        if (isFav) "Added to favorites" else "Removed from favorites"
+                                    )
                                 } else {
                                     snackbarHostState.showSnackbar("Error toggling favorite")
                                 }
@@ -690,16 +709,15 @@ fun ArtistDetailScreen(
                         }) {
                             Icon(
                                 painter = painterResource(
-                                    if (isFav)
-                                        R.drawable.baseline_star_24   // ← your “filled” star XML
-                                    else
-                                        R.drawable.outline_star_outline_24  // ← your outline‑star XML
+                                    if (isFav) R.drawable.baseline_star_24
+                                    else         R.drawable.outline_star_outline_24
                                 ),
-                                contentDescription = if (isFav) "Unfavorite" else "Favorite"
+                                contentDescription = null
                             )
                         }
                     }
                 }
+
             )
         }
     ) { paddingValues ->
@@ -734,7 +752,26 @@ fun ArtistDetailScreen(
                     when (tabIndex) {
                         0 -> DetailsTab(artistDetail!!)
                         1 -> ArtworksTab(artistId)
-                        2 -> SimilarTab(artistId, navController)
+                        2 -> SimilarTab(
+                            artistId         = artistId,
+                            navController    = navController,
+                            favoriteIds      = favoriteIds,
+                            onToggleFavorite = { id ->
+                                scope.launch {
+                                    val resp = RetrofitInstance.api.toggleFavorite(FavoriteRequest(id))
+                                    if (resp.isSuccessful) {
+                                        // refresh our local list
+                                        favorites = resp.body()?.favorites.orEmpty()
+                                        val justFavTitle = id in favoriteIds
+                                        snackbarHostState.showSnackbar(
+                                            if (!justFavTitle) "Removed from favorites" else "Added to favorites"
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar("Error toggling favorite")
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -1031,20 +1068,28 @@ fun ArtworksTab(artistId: String) {
 
 @Composable
 fun SimilarTab(
-    artistId:    String,
-    navController: NavController
+    artistId:          String,
+    navController:     NavController,
+    favoriteIds:       Set<String>,
+    onToggleFavorite:  (String) -> Unit
 ) {
     var similars by remember { mutableStateOf<List<Artist>>(emptyList()) }
     var loading  by remember { mutableStateOf(true) }
 
+    // fetch similar artists
     LaunchedEffect(artistId) {
-        try {
-            val resp = RetrofitInstance.api.getSimilar(artistId)
-            similars = resp.body()?.embedded?.results ?: emptyList()
+        loading = true
+        similars = try {
+            RetrofitInstance.api
+                .getSimilar(artistId)
+                .body()
+                ?.embedded
+                ?.artists        // <-- now matches your JSON
+                .orEmpty()
         } catch (_: Exception) {
-        } finally {
-            loading = false
+            emptyList()
         }
+        loading = false
     }
 
     if (loading) {
@@ -1052,45 +1097,20 @@ fun SimilarTab(
             CircularProgressIndicator()
         }
     } else {
-        LazyColumn(Modifier
-            .fillMaxSize()
-            .padding(8.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(8.dp)) {
             items(similars) { artist ->
-                Card(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(4.dp)
-                        .clickable { navController.navigate("artistDetail/${artist.id}") },
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    Row(
-                        Modifier.padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AsyncImage(
-                            model = artist.links.thumbnail?.href
-                                ?: "", // fallback or missing‐image placeholder
-                            contentDescription = artist.title,
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = artist.title.orEmpty(),
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .background(
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        )                    }
-                }
+                Log.d("ArtistRow", "Artist: $artist")
+                ArtistRow(
+                    artist            = artist,
+                    isFav             = artist.id in favoriteIds,
+                    onToggleFavorite  = onToggleFavorite,
+                    onClick           = { navController.navigate("artistDetail/${artist.id}") }
+                )
             }
         }
     }
 }
+
 
 @Composable
 fun LoginScreen(navController: NavController) {
@@ -1367,7 +1387,7 @@ private fun FavoriteArtistListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(fav.name, style = MaterialTheme.typography.bodyLarge)
+            Text(fav.title, style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(2.dp))
             Text(
                 text = "${fav.nationality}, b. ${fav.birthday}",
