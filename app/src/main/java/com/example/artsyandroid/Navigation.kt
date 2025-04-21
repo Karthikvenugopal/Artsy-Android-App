@@ -57,10 +57,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AccountBox
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.window.DialogProperties
@@ -71,6 +69,7 @@ import com.example.artsyandroid.network.FavoriteItem
 import com.example.artsyandroid.network.FavoriteRequest
 import java.time.Duration
 import java.time.Instant
+import androidx.compose.runtime.derivedStateOf
 
 
 @Composable
@@ -148,6 +147,9 @@ fun HomeScreen(navController: NavController) {
     val profileUrl = AuthManager.getProfileImage(context)
     var menuOpen  by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(Instant.now()) }
+    val favoriteIds by remember(favorites) {
+        derivedStateOf { favorites.map { it.artistId }.toSet() }
+    }
     LaunchedEffect(Unit) {
         while (true) {
             delay(1_000)
@@ -306,9 +308,22 @@ fun HomeScreen(navController: NavController) {
                 } else {
                     LazyColumn {
                         items(results) { artist ->
-                            ArtistRow(artist = artist) {
-                                navController.navigate("artistDetail/${it.links.self.href.substringAfterLast("/")}")
-                            }
+                            ArtistRow(
+                                artist            = artist,
+                                isFav             = favoriteIds.contains( artist.id ),
+                                onToggleFavorite  = { id ->
+                                    // fire your toggle endpoint, then reload `favorites`
+                                    scope.launch {
+                                        val resp = RetrofitInstance.api.toggleFavorite(FavoriteRequest(id))
+                                        if (resp.isSuccessful) {
+                                            favorites = resp.body()?.favorites.orEmpty()
+                                        }
+                                    }
+                                },
+                                onClick           = {
+                                    navController.navigate("artistDetail/${artist.id}")
+                                }
+                            )
                         }
                     }
                 }
@@ -391,42 +406,76 @@ fun HomeScreen(navController: NavController) {
 @Composable
 private fun ArtistRow(
     artist: Artist,
-    onClick: (Artist) -> Unit
+    isFav: Boolean,
+    onToggleFavorite: (String)->Unit,
+    onClick: (Artist)->Unit
 ) {
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
-            .clickable { onClick(artist) },
-        elevation = CardDefaults.cardElevation(4.dp),
-        shape     = RoundedCornerShape(8.dp)
     ) {
-        Column {
-            AsyncImage(
-                model             = artist.links.thumbnail?.href,
-                contentDescription = artist.title,                             // ← must come second
-                placeholder       = painterResource(R.drawable.artsy_logo),
-                error             = painterResource(R.drawable.artsy_logo),
-                fallback          = painterResource(R.drawable.artsy_logo),
-                modifier          = Modifier
-                    .fillMaxWidth()
-                    .height(150.dp),
-                contentScale      = ContentScale.Crop
-            )
-
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
-                Text(artist.title.orEmpty(), style = MaterialTheme.typography.bodyLarge)
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+        // ───── the tappable card ─────
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick(artist) },
+            elevation = CardDefaults.cardElevation(4.dp),
+            shape     = RoundedCornerShape(8.dp)
+        ) {
+            Column {
+                AsyncImage(
+                    model             = artist.links.thumbnail?.href,
+                    placeholder       = painterResource(R.drawable.artsy_logo),
+                    error             = painterResource(R.drawable.artsy_logo),
+                    fallback          = painterResource(R.drawable.artsy_logo),
+                    contentDescription= artist.title,
+                    modifier          = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp),
+                    contentScale      = ContentScale.Crop
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Text(artist.title.orEmpty(), style = MaterialTheme.typography.bodyLarge)
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                }
             }
+        }
+
+        // ───── the little round star button ─────
+        IconButton(
+            onClick = { onToggleFavorite(artist.id) },
+            modifier = Modifier
+                .size(48.dp)
+                .align(Alignment.TopEnd)
+                .padding(top = 12.dp, end = 12.dp)
+                .background(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                    shape = CircleShape
+                )
+                .padding(6.dp)
+        ) {
+            Icon(
+                painter = painterResource(
+                    if (isFav)
+                        R.drawable.baseline_star_24                // your filled‑star drawable
+                    else
+                        R.drawable.outline_star_outline_24          // your outline‑star XML
+                ),
+                contentDescription = if (isFav) "Unfavorite" else "Favorite",
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(32.dp)
+            )
         }
     }
 }
+
 
 
 
@@ -630,12 +679,8 @@ fun ArtistDetailScreen(
                                     .toggleFavorite(FavoriteRequest(artistId))
 
                                 if (resp.isSuccessful) {
-                                    // update local flag
-                                    isFav = resp.body()
-                                        ?.favorites
-                                        ?.any { it.artistId == artistId }
-                                        ?: isFav
-
+                                    // flip the local state
+                                    isFav = !isFav
                                     val msg = if (isFav) "Added to favorites" else "Removed from favorites"
                                     snackbarHostState.showSnackbar(msg)
                                 } else {
@@ -643,8 +688,15 @@ fun ArtistDetailScreen(
                                 }
                             }
                         }) {
-                            val icon = if (isFav) Icons.Filled.Star else Icons.Outlined.Star
-                            Icon(icon, contentDescription = null)
+                            Icon(
+                                painter = painterResource(
+                                    if (isFav)
+                                        R.drawable.baseline_star_24   // ← your “filled” star XML
+                                    else
+                                        R.drawable.outline_star_outline_24  // ← your outline‑star XML
+                                ),
+                                contentDescription = if (isFav) "Unfavorite" else "Favorite"
+                            )
                         }
                     }
                 }
