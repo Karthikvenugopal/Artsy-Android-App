@@ -2,6 +2,7 @@ package com.example.artsyandroid.network
 
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -37,4 +38,15 @@ interface ArtsyApiService {
 
     @POST("api/auth/register")
     suspend fun register(@Body req: RegisterRequest): Response<AuthResponse>
+
+    @DELETE("api/auth/delete-account")
+    suspend fun deleteAccount(): Response<Unit>
+
+    @GET("api/artists/favorites/saved")
+    suspend fun getFavorites(): Response<FavoritesResponse>
+
+    // toggle (add / remove) a favorite
+    @POST("api/artists/favorites")
+    suspend fun toggleFavorite(@Body req: FavoriteRequest): Response<FavoritesResponse>
+
 }

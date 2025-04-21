@@ -54,21 +54,36 @@ import androidx.compose.ui.graphics.Color
 import com.example.artsyandroid.network.Gene
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AccountBox
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.window.DialogProperties
 import com.example.artsyandroid.auth.AuthManager
 import com.example.artsyandroid.network.LoginRequest
 import com.example.artsyandroid.network.RegisterRequest
+import com.example.artsyandroid.network.FavoriteItem
+import com.example.artsyandroid.network.FavoriteRequest
+import java.time.Duration
+import java.time.Instant
 
 
 @Composable
 fun MyApp() {
+    val context = LocalContext.current
+    var loggedIn       by remember { mutableStateOf(false) }
+    var profileImage   by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        loggedIn = AuthManager.getToken(context) != null
+        if (loggedIn) {
+            profileImage = AuthManager.getProfileImage(context)
+        }
+    }
     val navController = rememberNavController()
     NavHost(navController, startDestination = "splash") {
         composable("splash")  { SplashScreen(navController) }
@@ -116,7 +131,8 @@ fun SplashScreen(navController: NavController) {
 fun HomeScreen(navController: NavController) {
     val context = LocalContext.current
     val loggedIn   = AuthManager.isLoggedIn()
-    // 1) Date formatting
+    var favorites  by remember { mutableStateOf<List<FavoriteItem>>(emptyList()) }
+    var favLoading by remember { mutableStateOf(false) }
     val todayString = remember {
         LocalDate.now().format(DateTimeFormatter.ofPattern("d MMMM yyyy"))
     }
@@ -129,6 +145,35 @@ fun HomeScreen(navController: NavController) {
     val scope       = rememberCoroutineScope()
     var searchJob   by remember { mutableStateOf<Job?>(null) }
     val debounceMs  = 300L
+    val profileUrl = AuthManager.getProfileImage(context)
+    var menuOpen  by remember { mutableStateOf(false) }
+    var now by remember { mutableStateOf(Instant.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1_000)
+            now = Instant.now()
+        }
+    }
+
+    LaunchedEffect(loggedIn) {
+        if (!loggedIn) return@LaunchedEffect
+
+        favLoading = true
+        favorites = try {
+            RetrofitInstance
+                .api
+                .getFavorites()
+                .body()
+                ?.favorites
+                .orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        } finally {
+            favLoading = false
+        }
+    }
+
+
 
     Scaffold(
         topBar = {
@@ -198,9 +243,51 @@ fun HomeScreen(navController: NavController) {
                         }) {
                             Icon(Icons.Default.Search, contentDescription = "Search")
                         }
-                        IconButton(onClick = { /* TODO: profile */ }) {
-                            Icon(Icons.Outlined.Person, contentDescription = "User")
-                        }
+                        if (loggedIn && profileUrl != null) {
+                            Box {
+                                AsyncImage(
+                                    model = profileUrl,
+                                    contentDescription = "Profile",
+                                    modifier = Modifier.size(36.dp).clip(CircleShape).clickable { menuOpen = true }
+                                )
+                                DropdownMenu(
+                                    expanded = menuOpen,
+                                    onDismissRequest = { menuOpen = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Log out") },
+                                        onClick = {
+                                            AuthManager.clearToken(context)
+                                            AuthManager.clearProfileImage(context)
+                                            menuOpen = false
+                                            navController.navigate("home"){
+                                                popUpTo("home"){ inclusive = true }
+                                                }
+                                            }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Delete account", color = MaterialTheme.colorScheme.error) },
+                                        onClick = {
+                                            menuOpen = false
+                                            scope.launch {
+                                                val resp = RetrofitInstance.api.deleteAccount()
+                                                if (resp.isSuccessful) {
+                                                    AuthManager.clearToken(context)
+                                                    AuthManager.clearProfileImage(context)
+                                                    navController.navigate("home"){
+                                                        popUpTo("home"){ inclusive = true }
+                                                    }
+                                                    }
+                                                }
+                                            }
+                                    )
+                                }
+                            }
+                            } else {
+                                IconButton(onClick = { navController.navigate("login") }) {
+                                Icon(Icons.Outlined.Person, contentDescription = "Log in")
+                                }
+                            }
                     }
                 }
             )
@@ -258,22 +345,27 @@ fun HomeScreen(navController: NavController) {
                         )
                     }
 
-                    Spacer(Modifier.height(40.dp))
+                    Spacer(Modifier.height(8.dp))
 //Added style
                     // Login button
-                    if (!loggedIn)
-                    {
-                        Button(
-                            onClick = {
-                                navController.navigate("login")
-                            }
-                        ) {
+                    Log.d("Favorites button", "loggedIn: $loggedIn")
+
+                    if (!loggedIn) {
+                        Button(onClick = { navController.navigate("login") }) {
                             Text("Log in to see favorites")
                         }
+                    } else if (favLoading) {
+                        CircularProgressIndicator()
                     } else {
-                        // TODO: replace this with your real favorites UI
-                        Text("No favorites yet", style = MaterialTheme.typography.bodyLarge)
+                        FavoritesSection(
+                            favorites = favorites,
+                            now = now,
+                            onArtistClick = { artistId ->
+                                navController.navigate("artistDetail/$artistId")
+                            }
+                        )
                     }
+
 
                     Spacer(Modifier.height(40.dp))
 
@@ -451,18 +543,61 @@ fun SearchScreen(navController: NavController) {
 @Composable
 fun ArtistDetailScreen(
     artistId: String,
-    navController: NavController,
-    isLoggedIn: Boolean = false // ← hook this up to your real login state
+    navController: NavController
 ) {
+    val isLoggedIn = AuthManager.isLoggedIn()
     var artistDetail by remember { mutableStateOf<ArtistDetailResponse?>(null) }
-    var isLoading    by remember { mutableStateOf(true) }
+    var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf("") }
+    var tabIndex by remember { mutableIntStateOf(0) }
+    var isFav     by remember { mutableStateOf(false) }
+    val scope     = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+
+    // on load, check if this artist is in favorites
+    LaunchedEffect(artistId, isLoggedIn) {
+        if (isLoggedIn) {
+            try {
+                val resp = RetrofitInstance.api.getFavorites()
+                isFav = resp.body()?.favorites?.any { it.artistId == artistId } == true
+            } catch (_: Exception) {
+                // Handle error if needed, maybe log or show a message
+            }
+        }
+    }
+
+    // Define tabs structure with icon painter
+    data class TabItem(
+        val icon: @Composable () -> Unit,  // Changed to composable icon
+        val label: String
+    )
+
+    val tabs = listOfNotNull(
+        TabItem(
+            icon = { Icon(Icons.Outlined.Info, contentDescription = "Details") },
+            label = "Details"
+        ),
+        TabItem(
+            icon = { Icon(Icons.Outlined.AccountBox, contentDescription = "Artworks") },
+            label = "Artworks"
+        ),
+        if (isLoggedIn) TabItem(
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.outline_person_search_24),
+                    contentDescription = "Similar Artists"
+                )
+            },
+            label = "Similar"
+        ) else null
+    )
 
     LaunchedEffect(artistId) {
         try {
             val resp = RetrofitInstance.api.getArtistDetail(artistId)
-            if (resp.isSuccessful)  artistDetail = resp.body()
-            else                   errorMessage = "Error ${resp.code()}"
+            if (resp.isSuccessful) artistDetail = resp.body()
+            else errorMessage = "Error ${resp.code()}"
         } catch (e: Exception) {
             errorMessage = e.message ?: "Unknown error"
         } finally {
@@ -470,39 +605,8 @@ fun ArtistDetailScreen(
         }
     }
 
-    var tabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf(
-        Icons.Outlined.Info        to "Details",
-        Icons.Outlined.AccountBox  to "Artworks",
-        Icons.Default.ThumbUp      to "Similar"
-    ).let {
-        if (!isLoggedIn) it.dropLast(1) else it
-    }
-
-    TabRow(selectedTabIndex = tabIndex) {
-        tabs.forEachIndexed { index, pair ->
-            val (icon, label) = pair
-            Tab(
-                selected = index == tabIndex,
-                onClick  = { tabIndex = index }
-            ) {
-                Column(
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector   = icon,
-                        contentDescription = label
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(label, style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-    }
-
-
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -516,6 +620,33 @@ fun ArtistDetailScreen(
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    if (isLoggedIn) {
+                        IconButton(onClick = {
+                            scope.launch {
+                                val resp = RetrofitInstance
+                                    .api
+                                    .toggleFavorite(FavoriteRequest(artistId))
+
+                                if (resp.isSuccessful) {
+                                    // update local flag
+                                    isFav = resp.body()
+                                        ?.favorites
+                                        ?.any { it.artistId == artistId }
+                                        ?: isFav
+
+                                    val msg = if (isFav) "Added to favorites" else "Removed from favorites"
+                                    snackbarHostState.showSnackbar(msg)
+                                } else {
+                                    snackbarHostState.showSnackbar("Error toggling favorite")
+                                }
+                            }
+                        }) {
+                            val icon = if (isFav) Icons.Filled.Star else Icons.Outlined.Star
+                            Icon(icon, contentDescription = null)
+                        }
+                    }
                 }
             )
         }
@@ -527,33 +658,31 @@ fun ArtistDetailScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             when {
-                isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                errorMessage.isNotEmpty() -> Text(errorMessage, modifier = Modifier.align(Alignment.Center))
+                isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                errorMessage.isNotEmpty() -> Text(errorMessage, Modifier.align(Alignment.Center))
                 artistDetail != null -> Column {
-                    // the tabs
                     TabRow(selectedTabIndex = tabIndex) {
-                        tabs.forEachIndexed { i, (icon, label) ->
+                        tabs.forEachIndexed { index, tab ->
                             Tab(
-                                selected = i == tabIndex,
-                                onClick  = { tabIndex = i }
+                                selected = index == tabIndex,
+                                onClick = { tabIndex = index }
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    Modifier.padding(vertical = 8.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Icon(icon, contentDescription = label)
+                                    tab.icon()  // Use the composable icon
                                     Spacer(Modifier.height(4.dp))
-                                    Text(label, style = MaterialTheme.typography.labelSmall)
+                                    Text(tab.label, style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
                     }
 
-                    // the tab content
                     when (tabIndex) {
                         0 -> DetailsTab(artistDetail!!)
                         1 -> ArtworksTab(artistId)
-                        2 -> if (isLoggedIn) SimilarTab(artistId, navController)
+                        2 -> SimilarTab(artistId, navController)
                     }
                 }
             }
@@ -964,6 +1093,7 @@ fun LoginScreen(navController: NavController) {
                             AuthManager.saveToken(context, auth.token)
                             //    e.g. save auth.token into DataStore or SharedPreferences
                             // 2) Navigate back to home:
+                            AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
 
                             navController.navigate("home") {
                                 popUpTo("home") { inclusive = true }
@@ -1042,6 +1172,7 @@ fun RegisterScreen(navController: NavController) {
                 Text(it, color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(16.dp))
+            val context = LocalContext.current
             Button(onClick = {
                 scope.launch {
                     try {
@@ -1049,6 +1180,8 @@ fun RegisterScreen(navController: NavController) {
                         if (resp.isSuccessful) {
                             val auth = resp.body()!!
                             Log.d("RegisterScreen", "auth: $auth")
+                            AuthManager.saveToken(context, auth.token)
+                            AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
                             // persist auth.token …
                             navController.navigate("home") {
                                 popUpTo("home") { inclusive = true }
@@ -1073,5 +1206,144 @@ fun RegisterScreen(navController: NavController) {
                 }
             }
         }
+    }
+}
+//@Composable
+//private fun FavoriteRow(
+//    fav: FavoriteItem,
+//    onClick: () -> Unit
+//) {
+//    Card(
+//        modifier = Modifier
+//            .fillMaxWidth()
+//            .padding(8.dp)
+//            .clickable{onClick()},
+//        elevation = CardDefaults.cardElevation(4.dp),
+//        shape     = RoundedCornerShape(8.dp)
+//    ) {
+//        Column {
+//            AsyncImage(
+//                model             = fav.thumbnail,
+//                contentDescription = fav.name,
+//                placeholder       = painterResource(R.drawable.artsy_logo),
+//                error             = painterResource(R.drawable.artsy_logo),
+//                fallback          = painterResource(R.drawable.artsy_logo),
+//                modifier          = Modifier
+//                    .fillMaxWidth()
+//                    .height(150.dp),
+//                contentScale      = ContentScale.Crop
+//            )
+//
+//            Row(
+//                Modifier
+//                    .fillMaxWidth()
+//                    .padding(8.dp),
+//                horizontalArrangement = Arrangement.SpaceBetween,
+//                verticalAlignment     = Alignment.CenterVertically
+//            ) {
+//                Column {
+//                    Text(fav.name, style = MaterialTheme.typography.bodyLarge)
+//                    Text(
+//                        "${fav.nationality}, ${fav.birthday}",
+//                        style = MaterialTheme.typography.bodySmall
+//                    )
+//                }
+//                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+//            }
+//        }
+//    }
+//}
+
+@Composable
+fun FavoritesSection(
+    favorites: List<FavoriteItem>,
+    now: Instant,
+    onArtistClick: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Section header
+//        Text(
+//            text = "Favorites",
+//            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(vertical = 8.dp),
+//            textAlign = TextAlign.Center
+//        )
+
+        if (favorites.isEmpty()) {
+            Text(
+                "No favorites yet",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                textAlign = TextAlign.Center
+            )
+        } else {
+            LazyColumn {
+                items(favorites) { fav ->
+                    FavoriteArtistListItem(
+                        fav = fav,
+                        now = now,
+                        onClick = { onArtistClick(fav.artistId) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavoriteArtistListItem(
+    fav: FavoriteItem,
+    now: Instant,
+    onClick: () -> Unit
+) {
+    // parse once
+    val then     = remember(fav.addedAt) { Instant.parse(fav.addedAt) }
+    val relative = computeRelativeTime(then, now)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable { onClick() }
+            // if you still want a subtle background, you can uncomment:
+            // .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+            .padding(12.dp),  // inner padding that used to live on the Card
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(fav.name, style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "${fav.nationality}, b. ${fav.birthday}",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = relative,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Go to details"
+            )
+        }
+    }
+}
+
+
+private fun computeRelativeTime(then: Instant, now: Instant): String {
+    val d = Duration.between(then, now)
+    return when {
+        d.seconds < 60   -> "${d.seconds} second${if (d.seconds==1L) "" else "s"} ago"
+        d.toMinutes()<60 -> "${d.toMinutes()} minute${if (d.toMinutes()==1L) "" else "s"} ago"
+        d.toHours() <24  -> "${d.toHours()} hour${if (d.toHours()==1L) "" else "s"} ago"
+        else             -> "${d.toDays()} day${if (d.toDays()==1L) "" else "s"} ago"
     }
 }

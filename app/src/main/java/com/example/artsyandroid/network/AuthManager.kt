@@ -11,6 +11,7 @@ import androidx.core.content.edit
 object AuthManager {
     private const val PREFS = "auth_prefs"
     private const val KEY_TOKEN = "jwt_token"
+    private const val KEY_PROFILE_IMAGE = "profile_image_url"
 
     fun saveToken(context: Context, token: String) {
         context
@@ -33,19 +34,31 @@ object AuthManager {
             .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_TOKEN, null)
 
+    fun saveProfileImage(context: Context, url: String) {
+        context
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit { putString(KEY_PROFILE_IMAGE, url) }
+    }
+    fun getProfileImage(context: Context): String? =
+        context
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_PROFILE_IMAGE, null)
+    fun clearProfileImage(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            remove(KEY_PROFILE_IMAGE)
+        }
+    }
     /**
      * A Compose‑friendly way to observe login state.
      * It just re‑reads the prefs on every recomposition,
      * so after you call saveToken()/clearToken() the UI will update.
      */
-    // in AuthManager.kt
     @Composable
     fun isLoggedIn(): Boolean {
         val ctx = LocalContext.current
-        // This will re‑read prefs whenever the composition invalidates
         return rememberUpdatedState(
-            ctx.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-                .getString("jwt_token", null) != null
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_TOKEN, null) != null
         ).value
     }
 

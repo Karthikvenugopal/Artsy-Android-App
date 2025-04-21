@@ -11,5 +11,4 @@ data class UserDto(
     val email: String,
     val profileImageUrl: String,
     val _id: String
-    // …or whatever fields you need…
 )
