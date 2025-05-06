@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.example.artsyandroid.network.RetrofitInstance
+import com.example.artsyandroid.ui.theme.ArtsyAndroidTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -15,7 +16,9 @@ class MainActivity : ComponentActivity() {
         RetrofitInstance.init(this)
 
         setContent {
-            MyApp()
+            ArtsyAndroidTheme {
+                MyApp()
+            }
         }
     }
 }

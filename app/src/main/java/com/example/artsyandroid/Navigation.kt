@@ -71,33 +71,36 @@ import java.time.Duration
 import java.time.Instant
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.focus.onFocusChanged
+import com.example.artsyandroid.ui.theme.ArtsyAndroidTheme
 
 @Composable
 fun MyApp() {
-    val context = LocalContext.current
-    var loggedIn       by remember { mutableStateOf(false) }
-    var profileImage   by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        loggedIn = AuthManager.getToken(context) != null
-        if (loggedIn) {
-            profileImage = AuthManager.getProfileImage(context)
+    ArtsyAndroidTheme {
+        val context = LocalContext.current
+        var loggedIn by remember { mutableStateOf(false) }
+        var profileImage by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(Unit) {
+            loggedIn = AuthManager.getToken(context) != null
+            if (loggedIn) {
+                profileImage = AuthManager.getProfileImage(context)
+            }
         }
-    }
-    val navController = rememberNavController()
-    NavHost(navController, startDestination = "splash") {
-        composable("splash")  { SplashScreen(navController) }
-        composable("home")    { HomeScreen(navController) }
-        composable("search")  { SearchScreen(navController) }
-        composable("login")   { LoginScreen(navController) }
-        composable("register"){ RegisterScreen(navController) }
-        composable(
-            "artistDetail/{artistId}",
-            arguments = listOf(navArgument("artistId"){ type = NavType.StringType })
-        ) { backStackEntry ->
-            ArtistDetailScreen(
-                backStackEntry.arguments!!.getString("artistId")!!,
-                navController
-            )
+        val navController = rememberNavController()
+        NavHost(navController, startDestination = "splash") {
+            composable("splash") { SplashScreen(navController) }
+            composable("home") { HomeScreen(navController) }
+            composable("search") { SearchScreen(navController) }
+            composable("login") { LoginScreen(navController) }
+            composable("register") { RegisterScreen(navController) }
+            composable(
+                "artistDetail/{artistId}",
+                arguments = listOf(navArgument("artistId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                ArtistDetailScreen(
+                    backStackEntry.arguments!!.getString("artistId")!!,
+                    navController
+                )
+            }
         }
     }
 }
