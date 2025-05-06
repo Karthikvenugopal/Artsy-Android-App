@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.draw.clip
 import com.example.artsyandroid.network.Artwork
 import androidx.compose.ui.layout.ContentScale
-import coil.request.ImageRequest
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.text.font.FontStyle
@@ -54,11 +53,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
 import com.example.artsyandroid.network.Gene
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.outlined.AccountBox
@@ -75,13 +71,6 @@ import java.time.Duration
 import java.time.Instant
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.focus.onFocusChanged
-
 
 @Composable
 fun MyApp() {
