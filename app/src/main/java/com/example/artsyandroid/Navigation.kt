@@ -4,6 +4,7 @@ package com.example.artsyandroid
 
 import android.content.Intent
 import android.util.Log
+import android.util.Patterns
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,8 +54,11 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
 import com.example.artsyandroid.network.Gene
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.outlined.AccountBox
@@ -70,6 +74,13 @@ import com.example.artsyandroid.network.FavoriteRequest
 import java.time.Duration
 import java.time.Instant
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.onFocusChanged
 
 
 @Composable
@@ -311,6 +322,7 @@ fun HomeScreen(navController: NavController) {
                             ArtistRow(
                                 artist            = artist,
                                 isFav             = favoriteIds.contains( artist.id ),
+                                isLoggedIn = loggedIn,
                                 onToggleFavorite  = { id ->
                                     // fire your toggle endpoint, then reload `favorites`
                                     scope.launch {
@@ -407,6 +419,7 @@ fun HomeScreen(navController: NavController) {
 private fun ArtistRow(
     artist: Artist,
     isFav: Boolean,
+    isLoggedIn: Boolean,
     onToggleFavorite: (String)->Unit,
     onClick: (Artist)->Unit
 ) {
@@ -415,40 +428,52 @@ private fun ArtistRow(
             .fillMaxWidth()
             .padding(8.dp)
     ) {
-        // ───── the tappable card ─────
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onClick(artist) },
             elevation = CardDefaults.cardElevation(4.dp),
-            shape     = RoundedCornerShape(8.dp)
+            shape = RoundedCornerShape(8.dp)
         ) {
-            Column {
+            Box {
                 AsyncImage(
-                    model             = artist.links.thumbnail?.href,
-                    placeholder       = painterResource(R.drawable.artsy_logo),
-                    error             = painterResource(R.drawable.artsy_logo),
-                    fallback          = painterResource(R.drawable.artsy_logo),
-                    contentDescription= artist.title,
-                    modifier          = Modifier
+                    model = artist.links.thumbnail?.href,
+                    placeholder = painterResource(R.drawable.artsy_logo),
+                    error = painterResource(R.drawable.artsy_logo),
+                    fallback = painterResource(R.drawable.artsy_logo),
+                    contentDescription = artist.title,
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .height(150.dp),
-                    contentScale      = ContentScale.Crop
+                        .height(188.dp),
+                    contentScale = ContentScale.Crop
                 )
+
+                // Title overlay
                 Row(
-                    Modifier
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
                         .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
                         .padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(artist.title.orEmpty(), style = MaterialTheme.typography.bodyLarge)
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                    Text(
+                        text = artist.title.orEmpty(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
 
         // ───── the little round star button ─────
+        if (isLoggedIn) {
         IconButton(
             onClick = { onToggleFavorite(artist.id) },
             modifier = Modifier
@@ -474,120 +499,108 @@ private fun ArtistRow(
             )
         }
     }
+    }
 }
-
-
-
 
 @Composable
 fun SearchScreen(navController: NavController) {
     var searchText by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<Artist>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val debounceDelay = 300L
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        OutlinedTextField(
-            value = searchText,
-            onValueChange = { text ->
-                searchText = text
-                if (text.length >= 3) {
+
+    // load favorites once so we can show snackbars
+    var favorites by remember { mutableStateOf<List<FavoriteItem>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        favorites = RetrofitInstance.api.getFavorites()
+            .body()?.favorites.orEmpty()
+    }
+    val favoriteIds = remember(favorites) { favorites.map { it.artistId }.toSet() }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .padding(innerPadding)
+        ) {
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = { text ->
+                    searchText = text
                     currentJob?.cancel()
-                    currentJob = coroutineScope.launch {
-                        delay(debounceDelay)
-                        if (searchText.length >= 3) {
+                    if (text.length >= 3) {
+                        currentJob = scope.launch {
+                            delay(debounceDelay)
                             isLoading = true
-                            val response = RetrofitInstance.api.searchArtists(searchText.trim())
                             searchResults = try {
-                                if (response.isSuccessful) {
-                                    response.body()?.embedded?.results ?: emptyList()
-                                } else {
-                                    emptyList()
-                                }
+                                RetrofitInstance.api.searchArtists(text.trim())
+                                    .body()?.embedded?.results.orEmpty()
                             } catch (_: Exception) {
                                 emptyList()
                             } finally {
                                 isLoading = false
                             }
                         }
+                    } else {
+                        searchResults = emptyList()
                     }
-                } else {
-                    searchResults = emptyList()
-                }
-            },
-            singleLine = true,
-            label = { Text("Search for an artist") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions.Default.copy(
-                imeAction = ImeAction.Search
-            ),
-            keyboardActions = KeyboardActions(
-                onSearch = { /* no-op */ }
+                },
+                singleLine = true,
+                label = { Text("Search for an artist") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {}),
+                modifier = Modifier.fillMaxWidth()
             )
-        )
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(16.dp))
 
-        if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-        } else {
-
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(searchResults) { artist ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .clickable { navController.navigate("artistDetail/${artist.id}") }
-                        ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(artist.links.thumbnail?.href)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = artist.title,
-                                placeholder = painterResource(R.drawable.artsy_logo),
-                                error       = painterResource(R.drawable.artsy_logo),
-                                fallback    = painterResource(R.drawable.artsy_logo),
-                                modifier    = Modifier
-                                    .fillMaxWidth()
-                                    .height(150.dp),
-                                contentScale = ContentScale.Crop
-                            )
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = artist.title.orEmpty(),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = "Go to details"
-                                )
+            if (isLoading) {
+                CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(searchResults) { artist ->
+                        ArtistRow(
+                            artist = artist,
+                            isFav = artist.id in favoriteIds,
+                            isLoggedIn = AuthManager.isLoggedIn(),
+                            onToggleFavorite = { id ->
+                                scope.launch { // Use the same coroutine scope
+                                    val resp = RetrofitInstance
+                                        .api
+                                        .toggleFavorite(FavoriteRequest(id))
+                                    if (resp.isSuccessful) {
+                                        favorites = resp.body()?.favorites.orEmpty()
+                                        val nowFav = id in favoriteIds
+                                        // Show snackbar
+                                        snackbarHostState.showSnackbar(
+                                            if (nowFav) "Removed from favorites"
+                                            else "Added to favorites"
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar("Error toggling favorite")
+                                    }
+                                }
+                            },
+                            onClick = {
+                                navController.navigate("artistDetail/${artist.id}")
                             }
-                        }
+                        )
                     }
                 }
             }
         }
     }
 }
+
+
 
 @Composable
 fun ArtistDetailScreen(
@@ -1103,6 +1116,7 @@ fun SimilarTab(
                 ArtistRow(
                     artist            = artist,
                     isFav             = artist.id in favoriteIds,
+                    isLoggedIn = AuthManager.isLoggedIn(),
                     onToggleFavorite  = onToggleFavorite,
                     onClick           = { navController.navigate("artistDetail/${artist.id}") }
                 )
@@ -1114,80 +1128,166 @@ fun SimilarTab(
 
 @Composable
 fun LoginScreen(navController: NavController) {
-    var email    by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var error    by remember { mutableStateOf<String?>(null) }
-    val scope    = rememberCoroutineScope()
+    var email           by remember { mutableStateOf("") }
+    var emailTouched    by remember { mutableStateOf(false) }
+    var password        by remember { mutableStateOf("") }
+    var showPwdError    by remember { mutableStateOf(false) }
+    var submitAttempted by remember { mutableStateOf(false) }
+    var errorMessage    by remember { mutableStateOf<String?>(null) }
+    val scope           = rememberCoroutineScope()
+    val context         = LocalContext.current
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Log In") }, navigationIcon = {
-            IconButton(onClick = { navController.popBackStack() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        TopAppBar(
+            title = { Text("Log In") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
             }
-        })
+        )
     }) { padding ->
         Column(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
                 .padding(padding),
             verticalArrangement = Arrangement.Center
         ) {
+            // ─── Email ────────────────────────────────────────────────────────────
             OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
+                value         = email,
+                onValueChange = {
+                    email = it
+                    errorMessage = null
+                },
+                label     = { Text("Email") },
+                isError   = (emailTouched && email.isBlank())
+                        || (submitAttempted
+                        && email.isNotBlank()
+                        && !Patterns.EMAIL_ADDRESS.matcher(email).matches()),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier    = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { fs -> if (fs.isFocused) emailTouched = true }
             )
+            if (emailTouched && email.isBlank()) {
+                Text(
+                    "Email cannot be empty",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            } else if (submitAttempted
+                && email.isNotBlank()
+                && !Patterns.EMAIL_ADDRESS.matcher(email).matches()
+            ) {
+                Text(
+                    "Invalid email format",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
+
+            // ─── Password ─────────────────────────────────────────────────────────
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = {
+                    password = it
+                    errorMessage = null
+                },
                 label = { Text("Password") },
+                isError = (showPwdError && password.isBlank()) || (submitAttempted && password.isBlank()),
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { fs ->
+                        if (fs.isFocused) {
+                            showPwdError = true // Set to true on focus
+                        }
+                    }
             )
-            error?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(it, color = MaterialTheme.colorScheme.error)
+            if ((showPwdError || submitAttempted) && password.isBlank()) {
+                Text(
+                    "Password cannot be empty",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
             }
-            Spacer(Modifier.height(16.dp))
-            val context = LocalContext.current
-            Button(onClick = {
-                scope.launch {
-                    try {
-                        val resp = RetrofitInstance.api.login(LoginRequest(email, password))
-                        if (resp.isSuccessful) {
-                            val auth = resp.body()!!
-                            // 1) Persist the token:
-                            AuthManager.saveToken(context, auth.token)
-                            //    e.g. save auth.token into DataStore or SharedPreferences
-                            // 2) Navigate back to home:
-                            AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
 
+            Spacer(Modifier.height(16.dp))
+
+            // ─── Login Button ─────────────────────────────────────────────────────
+            Button(
+                onClick = {
+                    submitAttempted = true
+                    emailTouched    = true
+                    showPwdError    = true
+
+                    val emailEmpty   = email.isBlank()
+                    val emailInvalid = email.isNotBlank()
+                            && !Patterns.EMAIL_ADDRESS.matcher(email).matches()
+                    val pwdEmpty     = password.isBlank()
+
+                    if (emailEmpty || emailInvalid || pwdEmpty) {
+                        return@Button
+                    }
+                    showPwdError = false
+
+                    scope.launch {
+                        val resp = try {
+                            RetrofitInstance.api.login(LoginRequest(email, password))
+                        } catch (_: Exception) {
+                            null
+                        }
+                        if (resp?.isSuccessful == true) {
+                            val auth = resp.body()!!
+                            AuthManager.saveToken(context, auth.token)
+                            AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
                             navController.navigate("home") {
                                 popUpTo("home") { inclusive = true }
                             }
                         } else {
-                            error = resp.errorBody()?.string() ?: "Login failed"
+                            errorMessage = "Username or password is incorrect"
                         }
-                    } catch (e: Exception) {
-                        error = "Network error: ${e.message}"
                     }
-                }
-            }, modifier = Modifier.fillMaxWidth()) {
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Log In")
             }
+
+            errorMessage?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
+
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
             ) {
-                TextButton(onClick = { navController.navigate("register") }) {
-                    Text("Don't have an account? Register")
-                }
+                Text("Don't have an account? ",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text("Register",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier
+                        .clickable { navController.navigate("register") }
+                        .padding(start = 2.dp)
+                )
             }
         }
     }
@@ -1195,136 +1295,201 @@ fun LoginScreen(navController: NavController) {
 
 @Composable
 fun RegisterScreen(navController: NavController) {
-    var fullName by remember { mutableStateOf("") }
-    var email    by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var error    by remember { mutableStateOf<String?>(null) }
-    val scope    = rememberCoroutineScope()
+    var fullName        by remember { mutableStateOf("") }
+    var nameTouched     by remember { mutableStateOf(false) }
+    var email           by remember { mutableStateOf("") }
+    var emailTouched    by remember { mutableStateOf(false) }
+    var password        by remember { mutableStateOf("") }
+    var showPwdError    by remember { mutableStateOf(false) }
+    var submitAttempted by remember { mutableStateOf(false) }
+    var errorMessage    by remember { mutableStateOf<String?>(null) }
+    val scope           = rememberCoroutineScope()
+    val context         = LocalContext.current
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Register") }, navigationIcon = {
-            IconButton(onClick = { navController.popBackStack() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        TopAppBar(
+            title = { Text("Register") },
+            navigationIcon = {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
             }
-        })
+        )
     }) { padding ->
         Column(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
                 .padding(padding),
             verticalArrangement = Arrangement.Center
         ) {
+            // ─── Full Name ───────────────────────────────────────────────────────
             OutlinedTextField(
-                value = fullName,
-                onValueChange = { fullName = it },
-                label = { Text("Full Name") },
+                value         = fullName,
+                onValueChange = {
+                    fullName = it
+                    errorMessage = null
+                },
+                label     = { Text("Full Name") },
+                isError   = nameTouched && fullName.isBlank(),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier    = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { fs -> if (fs.isFocused) nameTouched = true }
             )
+            if (nameTouched && fullName.isBlank()) {
+                Text(
+                    "Full name cannot be empty",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
+
+            // ─── Email ─────────────────────────────────────────────────────────
             OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
+                value         = email,
+                onValueChange = {
+                    email = it
+                    errorMessage = null
+                },
+                label     = { Text("Email") },
+                isError   = (emailTouched && email.isBlank())
+                        || (submitAttempted
+                        && email.isNotBlank()
+                        && !Patterns.EMAIL_ADDRESS.matcher(email).matches()),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier    = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { fs -> if (fs.isFocused) emailTouched = true }
             )
+            if (emailTouched && email.isBlank()) {
+                Text(
+                    "Email cannot be empty",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            } else if (submitAttempted
+                && email.isNotBlank()
+                && !Patterns.EMAIL_ADDRESS.matcher(email).matches()
+            ) {
+                Text(
+                    "Invalid email format",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
+
+            // ─── Password ───────────────────────────────────────────────────────
+            // ─── Password ─────────────────────────────────────────────────────────
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = {
+                    password = it
+                    errorMessage = null
+                },
                 label = { Text("Password") },
+                isError = (showPwdError && password.isBlank()) || (submitAttempted && password.isBlank()),
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { fs ->
+                        if (fs.isFocused) {
+                            showPwdError = true // Set to true on focus
+                        }
+                    }
             )
-            error?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(it, color = MaterialTheme.colorScheme.error)
+            if ((showPwdError || submitAttempted) && password.isBlank()) {
+                Text(
+                    "Password cannot be empty",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
             }
+
             Spacer(Modifier.height(16.dp))
-            val context = LocalContext.current
-            Button(onClick = {
-                scope.launch {
-                    try {
-                        val resp = RetrofitInstance.api.register(RegisterRequest(fullName, email, password))
-                        if (resp.isSuccessful) {
+
+            // ─── Register Button ────────────────────────────────────────────────
+            Button(
+                onClick = {
+                    submitAttempted = true
+                    nameTouched     = true
+                    emailTouched    = true
+                    showPwdError    = true
+
+                    val nameEmpty    = fullName.isBlank()
+                    val emailEmpty   = email.isBlank()
+                    val emailInvalid = email.isNotBlank()
+                            && !Patterns.EMAIL_ADDRESS.matcher(email).matches()
+                    val pwdEmpty     = password.isBlank()
+
+                    if (nameEmpty || emailEmpty || emailInvalid || pwdEmpty) {
+                        return@Button
+                    }
+                    showPwdError = false
+
+                    scope.launch {
+                        val resp = try {
+                            RetrofitInstance.api.register(RegisterRequest(fullName, email, password))
+                        } catch (_: Exception) {
+                            null
+                        }
+                        if (resp?.isSuccessful == true) {
                             val auth = resp.body()!!
-                            Log.d("RegisterScreen", "auth: $auth")
                             AuthManager.saveToken(context, auth.token)
                             AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
-                            // persist auth.token …
                             navController.navigate("home") {
                                 popUpTo("home") { inclusive = true }
                             }
                         } else {
-                            error = resp.errorBody()?.string() ?: "Registration failed"
+                            errorMessage = "Username or password is incorrect"
                         }
-                    } catch (e: Exception) {
-                        error = "Network error: ${e.message}"
                     }
-                }
-            }, modifier = Modifier.fillMaxWidth()) {
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Register")
             }
+
+            errorMessage?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
+
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
             ) {
-                TextButton(onClick = { navController.navigate("login") }) {
-                    Text("Already have an account? Log In")
-                }
+                Text("Already have an account? ",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text("Login",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier
+                        .clickable { navController.navigate("login") }
+                        .padding(start = 2.dp)
+                )
             }
         }
     }
 }
-//@Composable
-//private fun FavoriteRow(
-//    fav: FavoriteItem,
-//    onClick: () -> Unit
-//) {
-//    Card(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .padding(8.dp)
-//            .clickable{onClick()},
-//        elevation = CardDefaults.cardElevation(4.dp),
-//        shape     = RoundedCornerShape(8.dp)
-//    ) {
-//        Column {
-//            AsyncImage(
-//                model             = fav.thumbnail,
-//                contentDescription = fav.name,
-//                placeholder       = painterResource(R.drawable.artsy_logo),
-//                error             = painterResource(R.drawable.artsy_logo),
-//                fallback          = painterResource(R.drawable.artsy_logo),
-//                modifier          = Modifier
-//                    .fillMaxWidth()
-//                    .height(150.dp),
-//                contentScale      = ContentScale.Crop
-//            )
-//
-//            Row(
-//                Modifier
-//                    .fillMaxWidth()
-//                    .padding(8.dp),
-//                horizontalArrangement = Arrangement.SpaceBetween,
-//                verticalAlignment     = Alignment.CenterVertically
-//            ) {
-//                Column {
-//                    Text(fav.name, style = MaterialTheme.typography.bodyLarge)
-//                    Text(
-//                        "${fav.nationality}, ${fav.birthday}",
-//                        style = MaterialTheme.typography.bodySmall
-//                    )
-//                }
-//                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
-//            }
-//        }
-//    }
-//}
+
 
 @Composable
 fun FavoritesSection(
