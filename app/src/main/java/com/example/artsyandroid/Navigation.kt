@@ -61,7 +61,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.outlined.AccountBox
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.window.DialogProperties
 import com.example.artsyandroid.auth.AuthManager
@@ -260,9 +259,12 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                                 Icon(Icons.Default.Search, contentDescription = null)
                             },
                             trailingIcon = {
-                                IconButton(onClick = { query = "" }) {
+                                IconButton(onClick = {
+                                    navController.navigate("home") {
+                                        popUpTo("home") { inclusive = true }
+                                    }
+                                }) {
                                     Icon(Icons.Default.Close, contentDescription = "Clear")
-
                                 }
                             },
                             singleLine = true,
@@ -1017,13 +1019,25 @@ fun ArtworksTab(artistId: String) {
     }
 
     if (artworks.isEmpty()) {
+        Spacer(Modifier.height(16.dp))
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                // leave just small gutters on each side
+                .padding(horizontal = 16.dp)
+                // rounded corners
+                .clip(RoundedCornerShape(12.dp))
+                // same light bg as your top bar
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                // generous vertical padding
+                .padding(vertical = 20.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 "No Artworks",
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onBackground
             )
         }
         return
@@ -1053,8 +1067,9 @@ fun ArtworksTab(artistId: String) {
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = art.title,
+                        text = art.title + ", " + art.date,
                         style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp),
@@ -1118,15 +1133,15 @@ fun ArtworksTab(artistId: String) {
             if (showGenesDialog && selectedArtworkId != null) {
 
                 // at the top of your ArtworksTab, grab screen dims:
-                val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-                val dialogHeight = screenHeight * 0.75f
+//                val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+//                val dialogHeight = screenHeight * 0.75f
 
                 AlertDialog(
                     onDismissRequest = { showGenesDialog = false },
                     properties = DialogProperties(usePlatformDefaultWidth = false),
                     modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .height(dialogHeight),
+                        .fillMaxWidth(0.85f),
+//                        .height(dialogHeight),
                     title = {
                         Text(
                             "Categories",
@@ -1141,7 +1156,14 @@ fun ArtworksTab(artistId: String) {
                                 CircularProgressIndicator()
                             }
                         } else if (genes.isEmpty()) {
-                            Text("No Categories Found")
+                            Text(
+                                "No categories available",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),  // optional spacing
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         } else {
                             GenesCarousel(
                                 genes = genes,
@@ -1644,14 +1666,27 @@ fun FavoritesSection(
 //        )
 
         if (favorites.isEmpty()) {
-            Text(
-                "No favorites yet",
-                style = MaterialTheme.typography.bodyLarge,
+            Spacer(Modifier.height(12.dp))
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                textAlign = TextAlign.Center
-            )
+                    // leave just small gutters on each side
+                    .padding(horizontal = 8.dp)
+                    // rounded corners
+                    .clip(RoundedCornerShape(12.dp))
+                    // same light bg as your top bar
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                    // generous vertical padding
+                    .padding(vertical = 20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "No favorites",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
         } else {
             LazyColumn {
                 items(favorites) { fav ->

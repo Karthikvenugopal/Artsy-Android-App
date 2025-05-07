@@ -12,7 +12,7 @@ import okhttp3.CookieJar
 import okhttp3.logging.HttpLoggingInterceptor
 
 object RetrofitInstance {
-    private const val BASE_URL = "http://10.0.2.2:5001/"
+    private const val BASE_URL = "https://eng-hangar-456406-u2.wl.r.appspot.com/"
 
     // Exposed API instance, initialized in MainActivity
     lateinit var api: ArtsyApiService
