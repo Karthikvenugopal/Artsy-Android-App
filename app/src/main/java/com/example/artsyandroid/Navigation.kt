@@ -53,6 +53,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
 import com.example.artsyandroid.network.Gene
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -71,7 +73,10 @@ import java.time.Duration
 import java.time.Instant
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.zIndex
 import com.example.artsyandroid.ui.theme.ArtsyAndroidTheme
+import androidx.compose.material3.SnackbarDuration
 
 @Composable
 fun MyApp() {
@@ -88,7 +93,25 @@ fun MyApp() {
         val navController = rememberNavController()
         NavHost(navController, startDestination = "splash") {
             composable("splash") { SplashScreen(navController) }
-            composable("home") { HomeScreen(navController) }
+            composable(
+                "home?showLogoutSuccess={showLogoutSuccess}&showDeleteSuccess={showDeleteSuccess}",
+                arguments = listOf(
+                    navArgument("showLogoutSuccess") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
+                    navArgument("showDeleteSuccess") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
+            ) { backStackEntry ->
+                HomeScreen(
+                    navController,
+                    showLogoutSuccess = backStackEntry.arguments?.getBoolean("showLogoutSuccess") ?: false,
+                    showDeleteSuccess = backStackEntry.arguments?.getBoolean("showDeleteSuccess") ?: false
+                )
+            }
             composable("search") { SearchScreen(navController) }
             composable("login") { LoginScreen(navController) }
             composable("register") { RegisterScreen(navController) }
@@ -130,7 +153,7 @@ fun SplashScreen(navController: NavController) {
 
 
 @Composable
-fun HomeScreen(navController: NavController) {
+fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false, showDeleteSuccess: Boolean = false) {
     val context = LocalContext.current
     val loggedIn   = AuthManager.isLoggedIn()
     var favorites  by remember { mutableStateOf<List<FavoriteItem>>(emptyList()) }
@@ -138,7 +161,7 @@ fun HomeScreen(navController: NavController) {
     val todayString = remember {
         LocalDate.now().format(DateTimeFormatter.ofPattern("d MMMM yyyy"))
     }
-
+    val snackbarHostState = remember { SnackbarHostState() }
     // 2) Search state
     var isSearching by remember { mutableStateOf(false) }
     var query       by remember { mutableStateOf("") }
@@ -153,6 +176,25 @@ fun HomeScreen(navController: NavController) {
     val favoriteIds by remember(favorites) {
         derivedStateOf { favorites.map { it.artistId }.toSet() }
     }
+
+    // when either flag flips to true we fire the appropriate snack
+    LaunchedEffect(showLogoutSuccess) {
+        if (showLogoutSuccess) {
+            snackbarHostState.showSnackbar("Logged out successfully")
+            navController.currentBackStackEntry
+                ?.arguments
+                ?.putBoolean("showLogoutSuccess", false)
+        }
+    }
+    LaunchedEffect(showDeleteSuccess) {
+        if (showDeleteSuccess) {
+            snackbarHostState.showSnackbar("Deleted user successfully")
+            navController.currentBackStackEntry
+                ?.arguments
+                ?.putBoolean("showDeleteSuccess", false)
+        }
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             delay(1_000)
@@ -161,26 +203,28 @@ fun HomeScreen(navController: NavController) {
     }
 
     LaunchedEffect(loggedIn) {
-        if (!loggedIn) return@LaunchedEffect
-
-        favLoading = true
-        favorites = try {
-            RetrofitInstance
-                .api
-                .getFavorites()
-                .body()
-                ?.favorites
-                .orEmpty()
-        } catch (_: Exception) {
-            emptyList()
-        } finally {
-            favLoading = false
+        if (loggedIn != false) {
+            favLoading = true
+            favorites = try {
+                RetrofitInstance.api.getFavorites()
+                    .body()
+                    ?.favorites
+                    .orEmpty()
+            } catch (_: Exception) {
+                emptyList()
+            } finally {
+                favLoading = false
+            }
+        } else {
+            // logged out → clear favorites
+            favorites = emptyList()
         }
     }
 
 
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -259,36 +303,31 @@ fun HomeScreen(navController: NavController) {
                                     expanded = menuOpen,
                                     onDismissRequest = { menuOpen = false }
                                 ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Log out") },
-                                        onClick = {
+                                    DropdownMenuItem(text = { Text("Log out") }, onClick = {
+                                        scope.launch {
                                             AuthManager.clearToken(context)
                                             AuthManager.clearProfileImage(context)
-                                            menuOpen = false
-                                            navController.navigate("home"){
-                                                popUpTo("home"){ inclusive = true }
+                                            navController.navigate("home?showLogoutSuccess=true&showDeleteSuccess=false") {
+                                                popUpTo("home") { inclusive = true }
+                                            }
+                                        }
+                                    })
+                                    DropdownMenuItem(text = { Text("Delete account", color = MaterialTheme.colorScheme.error) }, onClick = {
+                                        scope.launch {
+                                            val resp = RetrofitInstance.api.deleteAccount()
+                                            if (resp.isSuccessful) {
+                                                AuthManager.clearToken(context)
+                                                AuthManager.clearProfileImage(context)
+                                                navController.navigate("home?showLogoutSuccess=false&showDeleteSuccess=true") {
+                                                    popUpTo("home") { inclusive = true }
                                                 }
                                             }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Delete account", color = MaterialTheme.colorScheme.error) },
-                                        onClick = {
-                                            menuOpen = false
-                                            scope.launch {
-                                                val resp = RetrofitInstance.api.deleteAccount()
-                                                if (resp.isSuccessful) {
-                                                    AuthManager.clearToken(context)
-                                                    AuthManager.clearProfileImage(context)
-                                                    navController.navigate("home"){
-                                                        popUpTo("home"){ inclusive = true }
-                                                    }
-                                                    }
-                                                }
-                                            }
-                                    )
+                                        }
+                                    })
                                 }
                             }
-                            } else {
+                            }
+                        else {
                                 IconButton(onClick = { navController.navigate("login") }) {
                                 Icon(Icons.Outlined.Person, contentDescription = "Log in")
                                 }
@@ -473,7 +512,7 @@ private fun ArtistRow(
                 .align(Alignment.TopEnd)
                 .padding(top = 12.dp, end = 12.dp)
                 .background(
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                    MaterialTheme.colorScheme.primary.copy(),
                     shape = CircleShape
                 )
                 .padding(6.dp)
@@ -515,7 +554,12 @@ fun SearchScreen(navController: NavController) {
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.zIndex(100f) // Force highest stacking order
+            )
+        }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -563,21 +607,21 @@ fun SearchScreen(navController: NavController) {
                             artist = artist,
                             isFav = artist.id in favoriteIds,
                             isLoggedIn = AuthManager.isLoggedIn(),
+                            // In SearchScreen's ArtistRow's onToggleFavorite:
                             onToggleFavorite = { id ->
-                                scope.launch { // Use the same coroutine scope
-                                    val resp = RetrofitInstance
-                                        .api
-                                        .toggleFavorite(FavoriteRequest(id))
+                                scope.launch {
+                                    val resp = RetrofitInstance.api.toggleFavorite(FavoriteRequest(id))
                                     if (resp.isSuccessful) {
-                                        favorites = resp.body()?.favorites.orEmpty()
-                                        val nowFav = id in favoriteIds
-                                        // Show snackbar
+                                        val newFavorites = resp.body()?.favorites.orEmpty()
+                                        favorites = newFavorites
+                                        val isNowFav = newFavorites.any { it.artistId == id }
+
+                                        // Show correct snackbar message
                                         snackbarHostState.showSnackbar(
-                                            if (nowFav) "Removed from favorites"
-                                            else "Added to favorites"
+                                            if (isNowFav) "Added to favorites ★"
+                                            else "Removed from favorites ☆",
+                                            duration = SnackbarDuration.Short
                                         )
-                                    } else {
-                                        snackbarHostState.showSnackbar("Error toggling favorite")
                                     }
                                 }
                             },
@@ -822,6 +866,122 @@ fun DetailsTab(detail: ArtistDetailResponse?) {
     }
 }
 
+@Composable
+private fun GeneCard(
+    gene: Gene,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        elevation = CardDefaults.cardElevation(4.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
+            AsyncImage(
+                model = gene.links.thumbnail?.href,
+                contentDescription = gene.name,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                contentScale = ContentScale.Crop,
+                placeholder = painterResource(R.drawable.artsy_logo),
+                error = painterResource(R.drawable.artsy_logo)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = gene.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = gene.description.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Justify,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun GenesCarousel(
+    genes: List<Gene>,
+    modifier: Modifier = Modifier,
+    // card size
+    cardWidth: Dp = 280.dp,
+    cardHeight: Dp = 600.dp,
+    // spacing between cards
+    spacing: Dp = 16.dp,
+    // “magic” hard-coded side inset
+    sideInset: Dp = 27.dp
+) {
+    if (genes.isEmpty()) return
+
+    // for infinite scroll:
+    val infiniteCount = Int.MAX_VALUE
+    val startIndex    = infiniteCount / 2 - (infiniteCount / 2 % genes.size)
+    val listState     = rememberLazyListState(initialFirstVisibleItemIndex = startIndex)
+    val scope         = rememberCoroutineScope()
+
+    Box(modifier = modifier.height(cardHeight)) {
+        LazyRow(
+            state = listState,
+            contentPadding = PaddingValues(
+                start = sideInset,
+                end   = sideInset
+            ),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(count = infiniteCount) { idx ->
+                val gene = genes[idx % genes.size]
+                GeneCard(
+                    gene = gene,
+                    modifier = Modifier
+                        .width(cardWidth)
+                        .height(cardHeight)
+                )
+            }
+        }
+
+        // left arrow
+        IconButton(
+            onClick = {
+                scope.launch {
+                    listState.animateScrollToItem(listState.firstVisibleItemIndex - 1)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .zIndex(1f)
+        ) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
+        }
+
+        // right arrow
+        IconButton(
+            onClick = {
+                scope.launch {
+                    listState.animateScrollToItem(listState.firstVisibleItemIndex + 1)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .zIndex(1f)
+        ) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next")
+        }
+    }
+}
+
+
 
 
 
@@ -951,7 +1111,6 @@ fun ArtworksTab(artistId: String) {
             }
 
             // state to track which gene is showing
-            var geneIndex by remember { mutableStateOf(0) }
 
 //            val configuration = LocalConfiguration.current
 
@@ -961,7 +1120,6 @@ fun ArtworksTab(artistId: String) {
                 // at the top of your ArtworksTab, grab screen dims:
                 val screenHeight = LocalConfiguration.current.screenHeightDp.dp
                 val dialogHeight = screenHeight * 0.75f
-                val carouselHeight = dialogHeight * 0.8f
 
                 AlertDialog(
                     onDismissRequest = { showGenesDialog = false },
@@ -976,77 +1134,22 @@ fun ArtworksTab(artistId: String) {
                             textAlign = TextAlign.Start
                         )
                     },
+                    // inside your AlertDialog text = { … } block
                     text = {
                         if (genesLoading) {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxWidth(), Alignment.Center) {
                                 CircularProgressIndicator()
                             }
                         } else if (genes.isEmpty()) {
                             Text("No Categories Found")
                         } else {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(carouselHeight),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = { geneIndex = (geneIndex - 1 + genes.size) % genes.size },
-                                    enabled = genes.size > 1
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
-                                }
-
-                                Card(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .padding(horizontal = 4.dp),
-                                    elevation = CardDefaults.cardElevation(4.dp),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .verticalScroll(rememberScrollState())
-                                    ) {
-                                        AsyncImage(
-                                            model = genes[geneIndex].links.thumbnail?.href,
-                                            contentDescription = genes[geneIndex].name,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(180.dp),
-                                            contentScale = ContentScale.Crop,
-                                            placeholder = painterResource(R.drawable.artsy_logo),
-                                            error       = painterResource(R.drawable.artsy_logo)
-                                        )
-                                        Spacer(Modifier.height(8.dp))
-                                        Text(
-                                            text = genes[geneIndex].name,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 16.dp)
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = genes[geneIndex].description.orEmpty(),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            textAlign = TextAlign.Justify,
-                                            modifier = Modifier.padding(horizontal = 16.dp)
-                                        )
-                                        Spacer(Modifier.weight(1f)) // empty space if description is short
-                                    }
-                                }
-
-                                IconButton(
-                                    onClick = { geneIndex = (geneIndex + 1) % genes.size },
-                                    enabled = genes.size > 1
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next")
-                                }
-                            }
+                            GenesCarousel(
+                                genes = genes,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
-                    },
+                    }
+                    ,
                     confirmButton = {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1128,12 +1231,20 @@ fun LoginScreen(navController: NavController) {
     var errorMessage    by remember { mutableStateOf<String?>(null) }
     val scope           = rememberCoroutineScope()
     val context         = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    var isLoading by remember { mutableStateOf(false) }
 
-    Scaffold(topBar = {
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
         TopAppBar(
             title = { Text("Log In") },
             navigationIcon = {
-                IconButton(onClick = { navController.popBackStack() }) {
+                IconButton(onClick = {
+                    navController.navigate("home") {
+                        // drop everything up to home
+                        popUpTo("home") { inclusive = true }
+                    }
+                }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
             }
@@ -1220,6 +1331,8 @@ fun LoginScreen(navController: NavController) {
                     submitAttempted = true
                     emailTouched    = true
                     showPwdError    = true
+                    isLoading = true
+
 
                     val emailEmpty   = email.isBlank()
                     val emailInvalid = email.isNotBlank()
@@ -1241,17 +1354,29 @@ fun LoginScreen(navController: NavController) {
                             val auth = resp.body()!!
                             AuthManager.saveToken(context, auth.token)
                             AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
-                            navController.navigate("home") {
+                            snackbarHostState.showSnackbar("Logged in successfully", duration = SnackbarDuration.Short)
+                            navController.navigate("home?showLoginSuccess=true") {
                                 popUpTo("home") { inclusive = true }
                             }
                         } else {
+                            isLoading = false
                             errorMessage = "Username or password is incorrect"
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Log In")
+                if (isLoading) {
+                    // small indeterminate spinner in the button
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Log In")
+                }
             }
 
             errorMessage?.let {
@@ -1297,8 +1422,13 @@ fun RegisterScreen(navController: NavController) {
     var errorMessage    by remember { mutableStateOf<String?>(null) }
     val scope           = rememberCoroutineScope()
     val context         = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    var isRegistering by remember { mutableStateOf(false) }
 
-    Scaffold(topBar = {
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
         TopAppBar(
             title = { Text("Register") },
             navigationIcon = {
@@ -1416,6 +1546,7 @@ fun RegisterScreen(navController: NavController) {
                     nameTouched     = true
                     emailTouched    = true
                     showPwdError    = true
+                    isRegistering   = true
 
                     val nameEmpty    = fullName.isBlank()
                     val emailEmpty   = email.isBlank()
@@ -1438,17 +1569,29 @@ fun RegisterScreen(navController: NavController) {
                             val auth = resp.body()!!
                             AuthManager.saveToken(context, auth.token)
                             AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
-                            navController.navigate("home") {
+                            snackbarHostState.showSnackbar("Registered successfully", duration = SnackbarDuration.Short)
+                            navController.navigate("home?showLoginSuccess=true") {
                                 popUpTo("home") { inclusive = true }
                             }
                         } else {
+                            isRegistering = false
                             errorMessage = "Username or password is incorrect"
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Register")
+                if (isRegistering) {
+                    // small indeterminate spinner in the button
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Register")
+                }
             }
 
             errorMessage?.let {
