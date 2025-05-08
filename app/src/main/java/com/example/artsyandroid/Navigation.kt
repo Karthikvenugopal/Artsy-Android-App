@@ -10,8 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -20,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -81,8 +78,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.linkify.LinkifyPlugin
-import android.net.Uri
 import android.text.method.LinkMovementMethod
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
 import io.noties.markwon.MarkwonConfiguration
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.core.CorePlugin
@@ -174,19 +172,18 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
     }
     val snackbarHostState = remember { SnackbarHostState() }
     // 2) Search state
-    var isSearching by remember { mutableStateOf(false) }
-    var query       by remember { mutableStateOf("") }
-    var results     by remember { mutableStateOf<List<Artist>>(emptyList()) }
-    var isLoading   by remember { mutableStateOf(false) }
+//    var isSearching by remember { mutableStateOf(false) }
+//    var query       by remember { mutableStateOf("") }
+//    var results     by remember { mutableStateOf<List<Artist>>(emptyList()) }
+//    var isLoading   by remember { mutableStateOf(false) }
     val scope       = rememberCoroutineScope()
-    var searchJob   by remember { mutableStateOf<Job?>(null) }
-    val debounceMs  = 300L
+//    var searchJob   by remember { mutableStateOf<Job?>(null) }
     val profileUrl = AuthManager.getProfileImage(context)
     var menuOpen  by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(Instant.now()) }
-    val favoriteIds by remember(favorites) {
-        derivedStateOf { favorites.map { it.artistId }.toSet() }
-    }
+//    val favoriteIds by remember(favorites) {
+//        derivedStateOf { favorites.map { it.artistId }.toSet() }
+//    }
 
     // when either flag flips to true we fire the appropriate snack
     LaunchedEffect(showLogoutSuccess) {
@@ -242,68 +239,13 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                     containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                 ),
                 title = {
-                    if (isSearching) {
-                        TextField(
-                            value = query,
-                            onValueChange = { txt ->
-                                query = txt
-                                // Debounce + fire the search once >=3 chars
-                                searchJob?.cancel()
-                                if (txt.length >= 3) {
-                                    searchJob = scope.launch {
-                                        delay(debounceMs)
-                                        isLoading = true
-                                        try {
-                                            val resp = RetrofitInstance.api.searchArtists(txt.trim())
-                                            results = resp.body()?.embedded?.results.orEmpty()
-                                        } catch (_: Exception) {
-                                            results = emptyList()
-                                        } finally {
-                                            isLoading = false
-                                        }
-                                    }
-                                } else {
-                                    results = emptyList()
-                                }
-                            },
-                            placeholder = { Text("Search artists…") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Search, contentDescription = null)
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = {
-                                    navController.navigate("home") {
-                                        popUpTo("home") { inclusive = true }
-                                    }
-                                }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear")
-                                }
-                            },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor   = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                unfocusedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                focusedIndicatorColor   = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
                         Text("Artist Search", modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 4.dp), textAlign = TextAlign.Start)
-                    }
                 },
                 actions = {
                     // only show the toggle‐search and profile icons when NOT searching
-                    if (!isSearching) {
-                        IconButton(onClick = {
-                            isSearching = true
-                            // reset any previous query/results:
-                            query = ""
-                            results = emptyList()
-                            isLoading = false
-                        }) {
+                        IconButton(onClick = { navController.navigate("search") }) {
                             Icon(Icons.Default.Search, contentDescription = "Search")
                         }
                         if (loggedIn && profileUrl != null) {
@@ -346,7 +288,7 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                                 Icon(Icons.Outlined.Person, contentDescription = "Log in")
                                 }
                             }
-                    }
+
                 }
             )
         }
@@ -357,34 +299,6 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (isSearching) {
-                // --- SEARCH RESULTS UI ---
-                if (isLoading) {
-                    CircularProgressIndicator(Modifier.align(Alignment.Center))
-                } else {
-                    LazyColumn {
-                        items(results) { artist ->
-                            ArtistRow(
-                                artist            = artist,
-                                isFav             = favoriteIds.contains( artist.id ),
-                                isLoggedIn = loggedIn,
-                                onToggleFavorite  = { id ->
-                                    // fire your toggle endpoint, then reload `favorites`
-                                    scope.launch {
-                                        val resp = RetrofitInstance.api.toggleFavorite(FavoriteRequest(id))
-                                        if (resp.isSuccessful) {
-                                            favorites = resp.body()?.favorites.orEmpty()
-                                        }
-                                    }
-                                },
-                                onClick           = {
-                                    navController.navigate("artistDetail/${artist.id}")
-                                }
-                            )
-                        }
-                    }
-                }
-            } else {
                 // --- NORMAL HOME UI ---
                 Column(
                     Modifier
@@ -454,7 +368,7 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                             .padding(bottom = 16.dp)
                     )
                 }
-            }
+
         }
     }
 }
@@ -549,13 +463,16 @@ private fun ArtistRow(
 
 @Composable
 fun SearchScreen(navController: NavController) {
-    var searchText by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<Artist>>(emptyList()) }
+    var searchText by rememberSaveable { mutableStateOf("") }
+    var searchResults by rememberSaveable { mutableStateOf(emptyList<Artist>()) }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val debounceDelay = 300L
 
+    val listState = rememberSaveable(saver = LazyListState.Saver) {
+        LazyListState()
+    }
 
     // load favorites once so we can show snackbars
     var favorites by remember { mutableStateOf<List<FavoriteItem>>(emptyList()) }
@@ -567,82 +484,112 @@ fun SearchScreen(navController: NavController) {
 
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // pick the exact same color you want for your home‐search bar
+    val container = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+
     Scaffold(
-        snackbarHost = {
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier.zIndex(100f) // Force highest stacking order
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            CenterAlignedTopAppBar(
+                // make the entire bar this color
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = container
+                ),
+                title = {
+                    TextField(
+                        value = searchText,
+                        onValueChange = { txt ->
+                            searchText = txt
+                            currentJob?.cancel()
+                            if (txt.length >= 3) {
+                                currentJob = scope.launch {
+                                    delay(debounceDelay)
+                                    isLoading = true
+                                    searchResults = try {
+                                        RetrofitInstance.api.searchArtists(txt.trim())
+                                            .body()?.embedded?.results.orEmpty()
+                                    } catch (_: Exception) {
+                                        emptyList()
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            } else {
+                                searchResults = emptyList()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("Search for an artist") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                // clear + go home
+                                navController.navigate("home") {
+                                    popUpTo("home") { inclusive = true }
+                                }
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear")
+                            }
+                        },
+                        colors = TextFieldDefaults.colors(
+                            // keep the field exactly the same color at all times
+                            focusedContainerColor   = container,
+                            unfocusedContainerColor = container,
+                            disabledContainerColor  = container,
+                            errorContainerColor     = container,
+                            // hide the underline
+                            focusedIndicatorColor   = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        )
+                    )
+                }
             )
         }
     ) { innerPadding ->
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(8.dp)
                 .padding(innerPadding)
         ) {
-            OutlinedTextField(
-                value = searchText,
-                onValueChange = { text ->
-                    searchText = text
-                    currentJob?.cancel()
-                    if (text.length >= 3) {
-                        currentJob = scope.launch {
-                            delay(debounceDelay)
-                            isLoading = true
-                            searchResults = try {
-                                RetrofitInstance.api.searchArtists(text.trim())
-                                    .body()?.embedded?.results.orEmpty()
-                            } catch (_: Exception) {
-                                emptyList()
-                            } finally {
-                                isLoading = false
-                            }
-                        }
-                    } else {
-                        searchResults = emptyList()
-                    }
-                },
-                singleLine = true,
-                label = { Text("Search for an artist") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {}),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(16.dp))
-
+            Spacer(Modifier.height(8.dp))
             if (isLoading) {
                 CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize(), state = listState) {
                     items(searchResults) { artist ->
                         ArtistRow(
                             artist = artist,
                             isFav = artist.id in favoriteIds,
                             isLoggedIn = AuthManager.isLoggedIn(),
-                            // In SearchScreen's ArtistRow's onToggleFavorite:
                             onToggleFavorite = { id ->
                                 scope.launch {
                                     val resp = RetrofitInstance.api.toggleFavorite(FavoriteRequest(id))
                                     if (resp.isSuccessful) {
-                                        val newFavorites = resp.body()?.favorites.orEmpty()
-                                        favorites = newFavorites
-                                        val isNowFav = newFavorites.any { it.artistId == id }
-
-                                        // Show correct snackbar message
+                                        val newFavs = resp.body()?.favorites.orEmpty()
+                                        favorites = newFavs
                                         snackbarHostState.showSnackbar(
-                                            if (isNowFav) "Added to favorites ★"
-                                            else "Removed from favorites ☆",
+                                            if (newFavs.any { it.artistId == id })
+                                                "Added to favorites"
+                                            else
+                                                "Removed from favorites",
                                             duration = SnackbarDuration.Short
                                         )
                                     }
                                 }
                             },
                             onClick = {
-                                navController.navigate("artistDetail/${artist.id}")
+                                navController.navigate("artistDetail/${artist.id}") {
+                                    popUpTo("search") {          // must exactly match your composable route
+                                        saveState = true         // snapshot SearchScreen’s UI state
+                                    }
+                                    launchSingleTop = true       // avoid duplicates
+                                    restoreState = true          // restore the saved state when you come back
+                                }
                             }
-
                         )
                     }
                 }
@@ -650,6 +597,7 @@ fun SearchScreen(navController: NavController) {
         }
     }
 }
+
 
 
 
@@ -1803,7 +1751,7 @@ fun MarkdownMathText(
         },
         update = { tv ->
             // ----- debug: print every markdown link target -----
-            val linkRegex = Regex("""\[[^\]]+]\(([^)]+)\)""")
+            val linkRegex = Regex("""\[[^]+]\(([^)]+)\)""")
             linkRegex.findAll(markdown).forEach { match ->
                 val rawLink = match.groupValues[1]
                 val fullUrl = if (rawLink.startsWith("/")) {
@@ -1826,7 +1774,7 @@ fun MarkdownMathText(
                                 "https://www.artsy.net$link"
                             } else link
                             view.context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(full))
+                                Intent(Intent.ACTION_VIEW, full.toUri())
                             )
                         }
                     }
