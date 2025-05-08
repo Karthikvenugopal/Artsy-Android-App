@@ -5,6 +5,7 @@ package com.example.artsyandroid
 import android.content.Intent
 import android.util.Log
 import android.util.Patterns
+import android.widget.TextView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -76,6 +77,17 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import com.example.artsyandroid.ui.theme.ArtsyAndroidTheme
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.ui.viewinterop.AndroidView
+import io.noties.markwon.Markwon
+import io.noties.markwon.ext.latex.JLatexMathPlugin
+import io.noties.markwon.linkify.LinkifyPlugin
+import android.net.Uri
+import android.text.method.LinkMovementMethod
+import io.noties.markwon.MarkwonConfiguration
+import io.noties.markwon.AbstractMarkwonPlugin
+import io.noties.markwon.core.CorePlugin
+import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+
 
 @Composable
 fun MyApp() {
@@ -630,6 +642,7 @@ fun SearchScreen(navController: NavController) {
                             onClick = {
                                 navController.navigate("artistDetail/${artist.id}")
                             }
+
                         )
                     }
                 }
@@ -731,8 +744,13 @@ fun ArtistDetailScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = {
+                        navController.popBackStack()
+                    }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 actions = {
@@ -901,10 +919,8 @@ private fun GeneCard(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = gene.description.orEmpty(),
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Justify,
+            MarkdownMathText(
+                markdown = gene.description.orEmpty(),
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
             Spacer(Modifier.weight(1f))
@@ -1348,22 +1364,28 @@ fun LoginScreen(navController: NavController) {
             Spacer(Modifier.height(16.dp))
 
             // ─── Login Button ─────────────────────────────────────────────────────
+            // … inside your LoginScreen composable …
+
             Button(
                 onClick = {
                     submitAttempted = true
-                    emailTouched    = true
-                    showPwdError    = true
-                    isLoading = true
+                    emailTouched = true
+                    showPwdError = true
 
-
+                    // 1) early‐check validation
                     val emailEmpty   = email.isBlank()
-                    val emailInvalid = email.isNotBlank()
-                            && !Patterns.EMAIL_ADDRESS.matcher(email).matches()
+                    val emailInvalid = email.isNotBlank() &&
+                            !Patterns.EMAIL_ADDRESS.matcher(email).matches()
                     val pwdEmpty     = password.isBlank()
 
                     if (emailEmpty || emailInvalid || pwdEmpty) {
+                        // reset loader right away
+                        isLoading = false
                         return@Button
                     }
+
+                    // 2) only now flip on loader
+                    isLoading = true
                     showPwdError = false
 
                     scope.launch {
@@ -1376,11 +1398,15 @@ fun LoginScreen(navController: NavController) {
                             val auth = resp.body()!!
                             AuthManager.saveToken(context, auth.token)
                             AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
-                            snackbarHostState.showSnackbar("Logged in successfully", duration = SnackbarDuration.Short)
+                            snackbarHostState.showSnackbar(
+                                "Logged in successfully",
+                                duration = SnackbarDuration.Short
+                            )
                             navController.navigate("home?showLoginSuccess=true") {
                                 popUpTo("home") { inclusive = true }
                             }
                         } else {
+                            // on failure, turn spinner off and show error
                             isLoading = false
                             errorMessage = "Username or password is incorrect"
                         }
@@ -1389,10 +1415,8 @@ fun LoginScreen(navController: NavController) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (isLoading) {
-                    // small indeterminate spinner in the button
                     CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(24.dp),
+                        modifier = Modifier.size(24.dp),
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary
                     )
@@ -1400,6 +1424,7 @@ fun LoginScreen(navController: NavController) {
                     Text("Log In")
                 }
             }
+
 
             errorMessage?.let {
                 Spacer(Modifier.height(8.dp))
@@ -1565,25 +1590,30 @@ fun RegisterScreen(navController: NavController) {
             Button(
                 onClick = {
                     submitAttempted = true
-                    nameTouched     = true
-                    emailTouched    = true
-                    showPwdError    = true
-                    isRegistering   = true
+                    nameTouched    = true
+                    emailTouched   = true
+                    showPwdError   = true
 
+                    // validation first
                     val nameEmpty    = fullName.isBlank()
                     val emailEmpty   = email.isBlank()
-                    val emailInvalid = email.isNotBlank()
-                            && !Patterns.EMAIL_ADDRESS.matcher(email).matches()
+                    val emailInvalid = email.isNotBlank() &&
+                            !Patterns.EMAIL_ADDRESS.matcher(email).matches()
                     val pwdEmpty     = password.isBlank()
 
                     if (nameEmpty || emailEmpty || emailInvalid || pwdEmpty) {
+                        isRegistering = false
                         return@Button
                     }
-                    showPwdError = false
+
+                    isRegistering = true
+                    showPwdError   = false
 
                     scope.launch {
                         val resp = try {
-                            RetrofitInstance.api.register(RegisterRequest(fullName, email, password))
+                            RetrofitInstance.api.register(
+                                RegisterRequest(fullName, email, password)
+                            )
                         } catch (_: Exception) {
                             null
                         }
@@ -1591,30 +1621,32 @@ fun RegisterScreen(navController: NavController) {
                             val auth = resp.body()!!
                             AuthManager.saveToken(context, auth.token)
                             AuthManager.saveProfileImage(context, auth.user.profileImageUrl)
-                            snackbarHostState.showSnackbar("Registered successfully", duration = SnackbarDuration.Short)
+                            snackbarHostState.showSnackbar(
+                                "Registered successfully",
+                                duration = SnackbarDuration.Short
+                            )
                             navController.navigate("home?showLoginSuccess=true") {
                                 popUpTo("home") { inclusive = true }
                             }
                         } else {
                             isRegistering = false
-                            errorMessage = "Username or password is incorrect"
+                            errorMessage   = "User already exists"
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (isRegistering) {
-                    // small indeterminate spinner in the button
                     CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(24.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        modifier   = Modifier.size(24.dp),
+                        strokeWidth= 2.dp,
+                        color      = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
                     Text("Register")
                 }
             }
+
 
             errorMessage?.let {
                 Spacer(Modifier.height(8.dp))
@@ -1754,3 +1786,56 @@ private fun computeRelativeTime(then: Instant, now: Instant): String {
         else             -> "${d.toDays()} day${if (d.toDays()==1L) "" else "s"} ago"
     }
 }
+
+
+@Composable
+fun MarkdownMathText(
+    markdown: String,
+    modifier: Modifier = Modifier
+) {
+    AndroidView(
+        factory = { ctx ->
+            TextView(ctx).apply {
+                movementMethod = LinkMovementMethod.getInstance()
+                linksClickable  = true
+                setTextIsSelectable(true)
+            }
+        },
+        update = { tv ->
+            // ----- debug: print every markdown link target -----
+            val linkRegex = Regex("""\[[^\]]+]\(([^)]+)\)""")
+            linkRegex.findAll(markdown).forEach { match ->
+                val rawLink = match.groupValues[1]
+                val fullUrl = if (rawLink.startsWith("/")) {
+                    "https://www.artsy.net$rawLink"
+                } else rawLink
+                Log.d("MarkdownLink", "extracted: $rawLink → full: $fullUrl")
+            }
+
+            val markwon = Markwon.builder(tv.context)
+                .usePlugin(CorePlugin.create())
+                .usePlugin(MarkwonInlineParserPlugin.create())
+                .usePlugin(JLatexMathPlugin.create(tv.textSize) { cfg ->
+                    cfg.inlinesEnabled(true)
+                })
+                .usePlugin(LinkifyPlugin.create())
+                .usePlugin(object : AbstractMarkwonPlugin() {
+                    override fun configureConfiguration(builder: MarkwonConfiguration.Builder) {
+                        builder.linkResolver { view, link ->
+                            val full = if (link.startsWith("/")) {
+                                "https://www.artsy.net$link"
+                            } else link
+                            view.context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(full))
+                            )
+                        }
+                    }
+                })
+                .build()
+
+            markwon.setMarkdown(tv, markdown)
+        },
+        modifier = modifier
+    )
+}
+
