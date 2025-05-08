@@ -5,7 +5,6 @@ package com.example.artsyandroid
 import android.content.Intent
 import android.util.Log
 import android.util.Patterns
-import android.widget.TextView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -74,11 +73,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import com.example.artsyandroid.ui.theme.ArtsyAndroidTheme
 import androidx.compose.material3.SnackbarDuration
-//import androidx.compose.ui.viewinterop.AndroidView
-//import io.noties.markwon.Markwon
-//import io.noties.markwon.ext.latex.JLatexMathPlugin
-//import io.noties.markwon.linkify.LinkifyPlugin
-//import android.text.method.LinkMovementMethod
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -87,14 +81,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
-//import io.noties.markwon.MarkwonConfiguration
-//import io.noties.markwon.AbstractMarkwonPlugin
-//import io.noties.markwon.core.CorePlugin
-//import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
-////import io.noties.markwon.utils.LinkTouchMovementMethod
-////import io.noties.markwon.core.spans.MovementMethodPlugin
-
-
 
 @Composable
 fun MyApp() {
@@ -164,7 +150,7 @@ fun SplashScreen(navController: NavController) {
             painter = painterResource(R.drawable.artsy_logo),
             contentDescription = "Artsy",
             modifier = Modifier
-                .size(200.dp)      // adjust as needed
+                .size(200.dp)
         )
     }
 }
@@ -180,21 +166,10 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
         LocalDate.now().format(DateTimeFormatter.ofPattern("d MMMM yyyy"))
     }
     val snackbarHostState = remember { SnackbarHostState() }
-    // 2) Search state
-//    var isSearching by remember { mutableStateOf(false) }
-//    var query       by remember { mutableStateOf("") }
-//    var results     by remember { mutableStateOf<List<Artist>>(emptyList()) }
-//    var isLoading   by remember { mutableStateOf(false) }
     val scope       = rememberCoroutineScope()
-//    var searchJob   by remember { mutableStateOf<Job?>(null) }
     val profileUrl = AuthManager.getProfileImage(context)
     var menuOpen  by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(Instant.now()) }
-//    val favoriteIds by remember(favorites) {
-//        derivedStateOf { favorites.map { it.artistId }.toSet() }
-//    }
-
-    // when either flag flips to true we fire the appropriate snack
     LaunchedEffect(showLogoutSuccess) {
         if (showLogoutSuccess) {
             snackbarHostState.showSnackbar("Logged out successfully")
@@ -233,7 +208,6 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                 favLoading = false
             }
         } else {
-            // logged out → clear favorites
             favorites = emptyList()
         }
     }
@@ -253,7 +227,6 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                             .padding(start = 4.dp), textAlign = TextAlign.Start)
                 },
                 actions = {
-                    // only show the toggle‐search and profile icons when NOT searching
                         IconButton(onClick = { navController.navigate("search") }) {
                             Icon(Icons.Default.Search, contentDescription = "Search")
                         }
@@ -266,7 +239,7 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                                 )
                                 DropdownMenu(
                                     expanded = menuOpen,
-                                    onDismissRequest = { menuOpen = false }
+                                    onDismissRequest = { menuOpen = false },
                                 ) {
                                     DropdownMenuItem(text = { Text("Log out") }, onClick = {
                                         scope.launch {
@@ -302,20 +275,17 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
             )
         }
     ) { innerPadding ->
-        // Body
         Box(
             Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-                // --- NORMAL HOME UI ---
                 Column(
                     Modifier
                         .fillMaxSize()
                         .padding(vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Date
                     Text(
                         text = todayString,
                         style = MaterialTheme.typography.bodyMedium,
@@ -325,8 +295,7 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                     )
                     Spacer(Modifier.height(4.dp))
 
-                    // Banner
-                    Surface( // added style
+                    Surface(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -341,8 +310,6 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
                     }
 
                     Spacer(Modifier.height(8.dp))
-//Added style
-                    // Login button
                     Log.d("Favorites button", "loggedIn: $loggedIn")
 
                     if (!loggedIn) {
@@ -364,7 +331,6 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
 
                     Spacer(Modifier.height(40.dp))
 
-                    // Powered by Artsy
                     Text(
                         "Powered by Artsy",
                         fontStyle = FontStyle.Italic,
@@ -382,7 +348,6 @@ fun HomeScreen(navController: NavController, showLogoutSuccess: Boolean = false,
     }
 }
 
-// helper row for each artist result
 @Composable
 private fun ArtistRow(
     artist: Artist,
@@ -416,7 +381,6 @@ private fun ArtistRow(
                     contentScale = ContentScale.Crop
                 )
 
-                // Title overlay
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -440,7 +404,6 @@ private fun ArtistRow(
             }
         }
 
-        // ───── the little round star button ─────
         if (isLoggedIn) {
         IconButton(
             onClick = { onToggleFavorite(artist.id) },
@@ -457,9 +420,9 @@ private fun ArtistRow(
             Icon(
                 painter = painterResource(
                     if (isFav)
-                        R.drawable.baseline_star_24                // your filled‑star drawable
+                        R.drawable.baseline_star_24
                     else
-                        R.drawable.outline_star_outline_24          // your outline‑star XML
+                        R.drawable.outline_star_outline_24
                 ),
                 contentDescription = if (isFav) "Unfavorite" else "Favorite",
                 tint = MaterialTheme.colorScheme.onPrimary,
@@ -483,7 +446,6 @@ fun SearchScreen(navController: NavController) {
         LazyListState()
     }
 
-    // load favorites once so we can show snackbars
     var favorites by remember { mutableStateOf<List<FavoriteItem>>(emptyList()) }
     LaunchedEffect(Unit) {
         favorites = RetrofitInstance.api.getFavorites()
@@ -493,14 +455,12 @@ fun SearchScreen(navController: NavController) {
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // pick the exact same color you want for your home‐search bar
     val container = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
-                // make the entire bar this color
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = container
                 ),
@@ -535,7 +495,6 @@ fun SearchScreen(navController: NavController) {
                         },
                         trailingIcon = {
                             IconButton(onClick = {
-                                // clear + go home
                                 navController.navigate("home") {
                                     popUpTo("home") { inclusive = true }
                                 }
@@ -544,12 +503,10 @@ fun SearchScreen(navController: NavController) {
                             }
                         },
                         colors = TextFieldDefaults.colors(
-                            // keep the field exactly the same color at all times
                             focusedContainerColor   = container,
                             unfocusedContainerColor = container,
                             disabledContainerColor  = container,
                             errorContainerColor     = container,
-                            // hide the underline
                             focusedIndicatorColor   = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent
                         )
@@ -564,7 +521,6 @@ fun SearchScreen(navController: NavController) {
                 .padding(8.dp)
                 .padding(innerPadding)
         ) {
-            // half the previous top gap
             Spacer(Modifier.height(4.dp))
 
             when {
@@ -572,7 +528,6 @@ fun SearchScreen(navController: NavController) {
                     CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
                 }
                 !isLoading && searchText.length >= 3 && searchResults.isEmpty() -> {
-                    // "No results" box
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -647,14 +602,13 @@ fun ArtistDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
 
-    // on load, check if this artist is in favorites
     LaunchedEffect(artistId, isLoggedIn) {
         if (isLoggedIn) {
             try {
                 val resp = RetrofitInstance.api.getFavorites()
                 isFav = resp.body()?.favorites?.any { it.artistId == artistId } == true
             } catch (_: Exception) {
-                // Handle error if needed, maybe log or show a message
+                Log.d("ArtistDetailScreen", "Error fetching favorites")
             }
         }
     }
@@ -673,9 +627,8 @@ fun ArtistDetailScreen(
         derivedStateOf { favorites.map { it.artistId }.toSet() }
     }
 
-    // Define tabs structure with icon painter
     data class TabItem(
-        val icon: @Composable () -> Unit,  // Changed to composable icon
+        val icon: @Composable () -> Unit,
         val label: String
     )
 
@@ -741,10 +694,8 @@ fun ArtistDetailScreen(
                                     .toggleFavorite(FavoriteRequest(artistId))
 
                                 if (resp.isSuccessful) {
-                                    // 1) refresh your full favorites list:
                                     favorites = resp.body()?.favorites.orEmpty()
 
-                                    // 2) recompute the detail‐screen star state
                                     isFav = artistId in favorites.map { it.artistId }
 
                                     snackbarHostState.showSnackbar(
@@ -789,7 +740,7 @@ fun ArtistDetailScreen(
                                     Modifier.padding(vertical = 8.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    tab.icon()  // Use the composable icon
+                                    tab.icon()
                                     Spacer(Modifier.height(4.dp))
                                     Text(tab.label, style = MaterialTheme.typography.labelSmall)
                                 }
@@ -858,7 +809,7 @@ fun DetailsTab(detail: ArtistDetailResponse?) {
                     text = d.biography.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Start  // or Center if you prefer
+                    textAlign = TextAlign.Start
                 )
             }
         }
@@ -910,17 +861,13 @@ private fun GeneCard(
 private fun GenesCarousel(
     genes: List<Gene>,
     modifier: Modifier = Modifier,
-    // card size
     cardWidth: Dp = 280.dp,
     cardHeight: Dp = 600.dp,
-    // spacing between cards
     spacing: Dp = 16.dp,
-    // “magic” hard-coded side inset
     sideInset: Dp = 27.dp
 ) {
     if (genes.isEmpty()) return
 
-    // for infinite scroll:
     val infiniteCount = Int.MAX_VALUE
     val startIndex    = infiniteCount / 2 - (infiniteCount / 2 % genes.size)
     val listState     = rememberLazyListState(initialFirstVisibleItemIndex = startIndex)
@@ -947,7 +894,6 @@ private fun GenesCarousel(
             }
         }
 
-        // left arrow
         IconButton(
             onClick = {
                 scope.launch {
@@ -961,7 +907,6 @@ private fun GenesCarousel(
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
         }
 
-        // right arrow
         IconButton(
             onClick = {
                 scope.launch {
@@ -978,23 +923,15 @@ private fun GenesCarousel(
 }
 
 
-
-
-
 @Composable
 fun ArtworksTab(artistId: String) {
     var artworks by remember { mutableStateOf<List<Artwork>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-
-    // state for the categories dialog:
     var showGenesDialog by remember { mutableStateOf(false) }
     var selectedArtworkId by remember { mutableStateOf<String?>(null) }
     var genesLoading by remember { mutableStateOf(false) }
     var genes by remember { mutableStateOf<List<Gene>>(emptyList()) }
 
-//    val scope = rememberCoroutineScope()
-
-    // 1) load artworks on first composition:
     LaunchedEffect(artistId) {
         try {
             val resp = RetrofitInstance.api.getArtworks(artistId)
@@ -1017,13 +954,9 @@ fun ArtworksTab(artistId: String) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                // leave just small gutters on each side
                 .padding(horizontal = 16.dp)
-                // rounded corners
                 .clip(RoundedCornerShape(12.dp))
-                // same light bg as your top bar
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                // generous vertical padding
                 .padding(vertical = 20.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -1086,7 +1019,6 @@ fun ArtworksTab(artistId: String) {
         }
     }
 
-    // 4) The categories dialog:
     if (showGenesDialog && selectedArtworkId != null) {
         LaunchedEffect(selectedArtworkId) {
             genesLoading = true
@@ -1100,10 +1032,8 @@ fun ArtworksTab(artistId: String) {
             }
         }
 
-        // inside ArtworksTab, replace the existing AlertDialog with:
 
         if (showGenesDialog && selectedArtworkId != null) {
-            // load genes as you already do…
             LaunchedEffect(selectedArtworkId) {
                 genesLoading = true
                 genes = try {
@@ -1119,23 +1049,14 @@ fun ArtworksTab(artistId: String) {
                 }
             }
 
-            // state to track which gene is showing
 
-//            val configuration = LocalConfiguration.current
 
-            // In ArtworksTab composable - Updated AlertDialog section
             if (showGenesDialog && selectedArtworkId != null) {
-
-                // at the top of your ArtworksTab, grab screen dims:
-//                val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-//                val dialogHeight = screenHeight * 0.75f
-
                 AlertDialog(
                     onDismissRequest = { showGenesDialog = false },
                     properties = DialogProperties(usePlatformDefaultWidth = false),
                     modifier = Modifier
                         .fillMaxWidth(0.85f),
-//                        .height(dialogHeight),
                     title = {
                         Text(
                             "Categories",
@@ -1143,7 +1064,6 @@ fun ArtworksTab(artistId: String) {
                             textAlign = TextAlign.Start
                         )
                     },
-                    // inside your AlertDialog text = { … } block
                     text = {
                         if (genesLoading) {
                             Box(Modifier.fillMaxWidth(), Alignment.Center) {
@@ -1154,7 +1074,7 @@ fun ArtworksTab(artistId: String) {
                                 "No categories available",
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 16.dp),  // optional spacing
+                                    .padding(vertical = 16.dp),
                                 textAlign = TextAlign.Center,
                                 style = MaterialTheme.typography.bodyMedium
                             )
@@ -1187,9 +1107,6 @@ fun ArtworksTab(artistId: String) {
     }
 }
 
-
-
-
 @Composable
 fun SimilarTab(
     artistId:          String,
@@ -1200,7 +1117,6 @@ fun SimilarTab(
     var similars by remember { mutableStateOf<List<Artist>>(emptyList()) }
     var loading  by remember { mutableStateOf(true) }
 
-    // fetch similar artists
     LaunchedEffect(artistId) {
         loading = true
         similars = try {
@@ -1208,7 +1124,7 @@ fun SimilarTab(
                 .getSimilar(artistId)
                 .body()
                 ?.embedded
-                ?.artists        // <-- now matches your JSON
+                ?.artists
                 .orEmpty()
         } catch (_: Exception) {
             emptyList()
@@ -1257,7 +1173,6 @@ fun LoginScreen(navController: NavController) {
             navigationIcon = {
                 IconButton(onClick = {
                     navController.navigate("home") {
-                        // drop everything up to home
                         popUpTo("home") { inclusive = true }
                     }
                 }) {
@@ -1273,7 +1188,6 @@ fun LoginScreen(navController: NavController) {
                 .padding(padding),
             verticalArrangement = Arrangement.Center
         ) {
-            // ─── Email ────────────────────────────────────────────────────────────
             OutlinedTextField(
                 value         = email,
                 onValueChange = {
@@ -1310,8 +1224,6 @@ fun LoginScreen(navController: NavController) {
             }
 
             Spacer(Modifier.height(8.dp))
-
-            // ─── Password ─────────────────────────────────────────────────────────
             OutlinedTextField(
                 value = password,
                 onValueChange = {
@@ -1326,7 +1238,7 @@ fun LoginScreen(navController: NavController) {
                     .fillMaxWidth()
                     .onFocusChanged { fs ->
                         if (fs.isFocused) {
-                            showPwdError = true // Set to true on focus
+                            showPwdError = true
                         }
                     }
             )
@@ -1340,29 +1252,21 @@ fun LoginScreen(navController: NavController) {
             }
 
             Spacer(Modifier.height(16.dp))
-
-            // ─── Login Button ─────────────────────────────────────────────────────
-            // … inside your LoginScreen composable …
-
             Button(
                 onClick = {
                     submitAttempted = true
                     emailTouched = true
                     showPwdError = true
-
-                    // 1) early‐check validation
                     val emailEmpty   = email.isBlank()
                     val emailInvalid = email.isNotBlank() &&
                             !Patterns.EMAIL_ADDRESS.matcher(email).matches()
                     val pwdEmpty     = password.isBlank()
 
                     if (emailEmpty || emailInvalid || pwdEmpty) {
-                        // reset loader right away
                         isLoading = false
                         return@Button
                     }
 
-                    // 2) only now flip on loader
                     isLoading = true
                     showPwdError = false
 
@@ -1384,7 +1288,6 @@ fun LoginScreen(navController: NavController) {
                                 popUpTo("home") { inclusive = true }
                             }
                         } else {
-                            // on failure, turn spinner off and show error
                             isLoading = false
                             errorMessage = "Username or password is incorrect"
                         }
@@ -1470,7 +1373,6 @@ fun RegisterScreen(navController: NavController) {
                 .padding(padding),
             verticalArrangement = Arrangement.Center
         ) {
-            // ─── Full Name ───────────────────────────────────────────────────────
             OutlinedTextField(
                 value         = fullName,
                 onValueChange = {
@@ -1494,8 +1396,6 @@ fun RegisterScreen(navController: NavController) {
             }
 
             Spacer(Modifier.height(8.dp))
-
-            // ─── Email ─────────────────────────────────────────────────────────
             OutlinedTextField(
                 value         = email,
                 onValueChange = {
@@ -1532,9 +1432,6 @@ fun RegisterScreen(navController: NavController) {
             }
 
             Spacer(Modifier.height(8.dp))
-
-            // ─── Password ───────────────────────────────────────────────────────
-            // ─── Password ─────────────────────────────────────────────────────────
             OutlinedTextField(
                 value = password,
                 onValueChange = {
@@ -1549,7 +1446,7 @@ fun RegisterScreen(navController: NavController) {
                     .fillMaxWidth()
                     .onFocusChanged { fs ->
                         if (fs.isFocused) {
-                            showPwdError = true // Set to true on focus
+                            showPwdError = true
                         }
                     }
             )
@@ -1563,16 +1460,12 @@ fun RegisterScreen(navController: NavController) {
             }
 
             Spacer(Modifier.height(16.dp))
-
-            // ─── Register Button ────────────────────────────────────────────────
             Button(
                 onClick = {
                     submitAttempted = true
                     nameTouched    = true
                     emailTouched   = true
                     showPwdError   = true
-
-                    // validation first
                     val nameEmpty    = fullName.isBlank()
                     val emailEmpty   = email.isBlank()
                     val emailInvalid = email.isNotBlank() &&
@@ -1665,28 +1558,14 @@ fun FavoritesSection(
     onArtistClick: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Section header
-//        Text(
-//            text = "Favorites",
-//            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-//            modifier = Modifier
-//                .fillMaxWidth()
-//                .padding(vertical = 8.dp),
-//            textAlign = TextAlign.Center
-//        )
-
         if (favorites.isEmpty()) {
             Spacer(Modifier.height(12.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // leave just small gutters on each side
                     .padding(horizontal = 8.dp)
-                    // rounded corners
                     .clip(RoundedCornerShape(12.dp))
-                    // same light bg as your top bar
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                    // generous vertical padding
                     .padding(vertical = 20.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -1717,7 +1596,6 @@ private fun FavoriteArtistListItem(
     now: Instant,
     onClick: () -> Unit
 ) {
-    // parse once
     val then     = remember(fav.addedAt) { Instant.parse(fav.addedAt) }
     val relative = computeRelativeTime(then, now)
 
@@ -1726,16 +1604,14 @@ private fun FavoriteArtistListItem(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clickable { onClick() }
-            // if you still want a subtle background, you can uncomment:
-            // .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
-            .padding(12.dp),  // inner padding that used to live on the Card
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(fav.title, style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "${fav.nationality}, b. ${fav.birthday}",
+                text = "${fav.nationality}, ${fav.birthday}",
                 style = MaterialTheme.typography.bodySmall
             )
         }
@@ -1756,14 +1632,28 @@ private fun FavoriteArtistListItem(
 
 
 private fun computeRelativeTime(then: Instant, now: Instant): String {
-    val d = Duration.between(then, now)
+    val diff = Duration.between(then, now).let { if (it.isNegative) Duration.ZERO else it }
+    val secs = diff.seconds
+
     return when {
-        d.seconds < 60   -> "${d.seconds} second${if (d.seconds==1L) "" else "s"} ago"
-        d.toMinutes()<60 -> "${d.toMinutes()} minute${if (d.toMinutes()==1L) "" else "s"} ago"
-        d.toHours() <24  -> "${d.toHours()} hour${if (d.toHours()==1L) "" else "s"} ago"
-        else             -> "${d.toDays()} day${if (d.toDays()==1L) "" else "s"} ago"
+        secs <= 60 -> {
+            "$secs second${if (secs == 1L) "" else "s"} ago"
+        }
+        secs < 3_600 -> {
+            val mins = secs / 60
+            "$mins minute${if (mins == 1L) "" else "s"} ago"
+        }
+        secs < 86_400 -> {
+            val hours = secs / 3_600
+            "$hours hour${if (hours == 1L) "" else "s"} ago"
+        }
+        else -> {
+            val days = secs / 86_400
+            "$days day${if (days == 1L) "" else "s"} ago"
+        }
     }
 }
+
 
 
 @Composable
