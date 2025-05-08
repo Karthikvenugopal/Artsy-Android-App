@@ -1,4 +1,3 @@
-// RegisterRequest.kt
 package com.example.artsyandroid.network
 
 data class RegisterRequest(

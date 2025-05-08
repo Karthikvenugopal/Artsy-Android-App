@@ -1,19 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Blue color scheme -->
     <color name="blue_200">#BBDEFB</color>
     <color name="blue_500">#2196F3</color>
     <color name="blue_700">#1976D2</color>
     <color name="blue_secondary">#64B5F6</color>
     <color name="blue_tertiary">#42A5F5</color>
-
-    <!-- Neutral colors -->
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
-
-    <!-- Background/surface colors -->
     <color name="background_light">#FFF5F5F5</color>
     <color name="background_dark">#FF121212</color>
-
     <color name="your_splash_bg">#FFFFFF</color>
 </resources>

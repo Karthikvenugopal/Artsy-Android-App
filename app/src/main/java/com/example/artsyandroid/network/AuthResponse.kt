@@ -1,4 +1,3 @@
-// AuthResponse.kt
 package com.example.artsyandroid.network
 
 data class AuthResponse(

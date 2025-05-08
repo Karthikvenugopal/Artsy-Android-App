@@ -45,7 +45,6 @@ interface ArtsyApiService {
     @GET("api/artists/favorites/saved")
     suspend fun getFavorites(): Response<FavoritesResponse>
 
-    // toggle (add / remove) a favorite
     @POST("api/artists/favorites")
     suspend fun toggleFavorite(@Body req: FavoriteRequest): Response<FavoritesResponse>
 

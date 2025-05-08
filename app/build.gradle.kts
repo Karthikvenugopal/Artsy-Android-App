@@ -59,17 +59,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.material)
     implementation(libs.persistentcookiejar)
-//    implementation(libs.markwon.core)
-//    implementation(libs.markwon.ext.latex)
-//    implementation(libs.markwon.inline.parser) // Make sure this matches the name in toml
-//    implementation(libs.markwon.linkify)
-//    implementation(libs.markwon.ext.latex.jlatexmath)
-
-    // Existing dependencies...
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

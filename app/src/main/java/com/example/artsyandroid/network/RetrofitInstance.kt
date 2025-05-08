@@ -14,7 +14,6 @@ import okhttp3.logging.HttpLoggingInterceptor
 object RetrofitInstance {
     private const val BASE_URL = "https://eng-hangar-456406-u2.wl.r.appspot.com/"
 
-    // Exposed API instance, initialized in MainActivity
     lateinit var api: ArtsyApiService
         private set
 
@@ -26,18 +25,14 @@ object RetrofitInstance {
             SetCookieCache(),
             SharedPrefsCookiePersistor(context)
         )
-            // 2) Wrap it so Secure‑flag is stripped
         val cookieJar: CookieJar = LenientCookieJar(realJar)
 
         val client = OkHttpClient.Builder()
-            // 1) Network‐interceptor goes before cookieJar()
             .addNetworkInterceptor { chain ->
                 val resp = chain.proceed(chain.request())
-                // remove any “; Secure” from all Set‑Cookie headers
                 val cleaned = resp.headers("Set-Cookie")
                     .map { it.replace(Regex("(?i);\\s*secure"), "") }
 
-                // rebuild headers without the old Set-Cookie, then add back cleaned ones
                 val newHeaders = resp.headers.newBuilder()
                     .removeAll("Set-Cookie")
                     .also { hdrs ->
@@ -60,7 +55,6 @@ object RetrofitInstance {
                 chain.proceed(reqBuilder.build())
             }
             .build()
-
         api = Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(client)
@@ -68,5 +62,4 @@ object RetrofitInstance {
             .build()
             .create(ArtsyApiService::class.java)
     }
-
 }

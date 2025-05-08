@@ -19,7 +19,7 @@ import androidx.core.view.WindowCompat
 @Composable
 fun ArtsyAndroidTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Disabled to maintain consistent blue theme
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

@@ -1,4 +1,3 @@
-// AuthManager.kt
 package com.example.artsyandroid.auth
 
 import android.content.Context
@@ -7,7 +6,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
 
-// in AuthManager.kt
 object AuthManager {
     private const val PREFS = "auth_prefs"
     private const val KEY_TOKEN = "jwt_token"
@@ -48,11 +46,6 @@ object AuthManager {
             remove(KEY_PROFILE_IMAGE)
         }
     }
-    /**
-     * A Compose‑friendly way to observe login state.
-     * It just re‑reads the prefs on every recomposition,
-     * so after you call saveToken()/clearToken() the UI will update.
-     */
     @Composable
     fun isLoggedIn(): Boolean {
         val ctx = LocalContext.current

@@ -8,11 +8,9 @@ import com.example.artsyandroid.ui.theme.ArtsyAndroidTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Apply the theme first
         setTheme(R.style.Theme_ArtsyAndroid)
         super.onCreate(savedInstanceState)
 
-        // Initialize RetrofitInstance.api with Auth interceptor
         RetrofitInstance.init(this)
 
         setContent {
