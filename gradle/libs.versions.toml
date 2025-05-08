@@ -48,10 +48,15 @@ logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", ver
 material = { module = "com.google.android.material:material", version.ref = "material" }
 persistentcookiejar = { module = "com.github.franmontiel:PersistentCookieJar", version.ref = "persistentcookiejar" }
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
-markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
-markwon-ext-latex = { group = "io.noties.markwon", name = "ext-latex", version.ref = "markwon" }
-markwon-inline-parser = { group = "io.noties.markwon", name = "inline-parser", version.ref = "markwon" }
-markwon-linkify = { group = "io.noties.markwon", name = "linkify", version.ref = "markwon" }
+#markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
+## the LaTeX plugin
+#markwon-ext-latex = { group = "io.noties.markwon", name = "ext-latex", version.ref = "markwon" }
+## the inline-parser plugin
+#markwon-inline-parser = { group = "io.noties.markwon", name = "inline-parser", version.ref = "markwon" }
+## the linkify plugin
+#markwon-linkify = { group = "io.noties.markwon", name = "linkify", version.ref = "markwon" }
+## if you need the JLatexMath‐specific artifact:
+#markwon-ext-latex-jlatexmath = { group = "io.noties.markwon", name = "ext-latex-jlatexmath", version.ref = "markwon" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

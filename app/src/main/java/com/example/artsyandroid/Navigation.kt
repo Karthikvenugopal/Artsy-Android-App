@@ -74,17 +74,26 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import com.example.artsyandroid.ui.theme.ArtsyAndroidTheme
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.ui.viewinterop.AndroidView
-import io.noties.markwon.Markwon
-import io.noties.markwon.ext.latex.JLatexMathPlugin
-import io.noties.markwon.linkify.LinkifyPlugin
-import android.text.method.LinkMovementMethod
+//import androidx.compose.ui.viewinterop.AndroidView
+//import io.noties.markwon.Markwon
+//import io.noties.markwon.ext.latex.JLatexMathPlugin
+//import io.noties.markwon.linkify.LinkifyPlugin
+//import android.text.method.LinkMovementMethod
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.runtime.saveable.rememberSaveable
-import io.noties.markwon.MarkwonConfiguration
-import io.noties.markwon.AbstractMarkwonPlugin
-import io.noties.markwon.core.CorePlugin
-import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
+//import io.noties.markwon.MarkwonConfiguration
+//import io.noties.markwon.AbstractMarkwonPlugin
+//import io.noties.markwon.core.CorePlugin
+//import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+////import io.noties.markwon.utils.LinkTouchMovementMethod
+////import io.noties.markwon.core.spans.MovementMethodPlugin
+
 
 
 @Composable
@@ -555,51 +564,73 @@ fun SearchScreen(navController: NavController) {
                 .padding(8.dp)
                 .padding(innerPadding)
         ) {
-            Spacer(Modifier.height(8.dp))
-            if (isLoading) {
-                CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
-            } else {
-                LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    items(searchResults) { artist ->
-                        ArtistRow(
-                            artist = artist,
-                            isFav = artist.id in favoriteIds,
-                            isLoggedIn = AuthManager.isLoggedIn(),
-                            onToggleFavorite = { id ->
-                                scope.launch {
-                                    val resp = RetrofitInstance.api.toggleFavorite(FavoriteRequest(id))
-                                    if (resp.isSuccessful) {
-                                        val newFavs = resp.body()?.favorites.orEmpty()
-                                        favorites = newFavs
-                                        snackbarHostState.showSnackbar(
-                                            if (newFavs.any { it.artistId == id })
-                                                "Added to favorites"
-                                            else
-                                                "Removed from favorites",
-                                            duration = SnackbarDuration.Short
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = {
-                                navController.navigate("artistDetail/${artist.id}") {
-                                    popUpTo("search") {          // must exactly match your composable route
-                                        saveState = true         // snapshot SearchScreen’s UI state
-                                    }
-                                    launchSingleTop = true       // avoid duplicates
-                                    restoreState = true          // restore the saved state when you come back
-                                }
-                            }
+            // half the previous top gap
+            Spacer(Modifier.height(4.dp))
+
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                }
+                !isLoading && searchText.length >= 3 && searchResults.isEmpty() -> {
+                    // "No results" box
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(container)
+                            .padding(vertical = 20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No Artists Found",
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onBackground
                         )
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(searchResults) { artist ->
+                            ArtistRow(
+                                artist = artist,
+                                isFav = artist.id in favoriteIds,
+                                isLoggedIn = AuthManager.isLoggedIn(),
+                                onToggleFavorite = { id ->
+                                    scope.launch {
+                                        val resp = RetrofitInstance.api.toggleFavorite(FavoriteRequest(id))
+                                        if (resp.isSuccessful) {
+                                            val newFavs = resp.body()?.favorites.orEmpty()
+                                            favorites = newFavs
+                                            snackbarHostState.showSnackbar(
+                                                if (newFavs.any { it.artistId == id })
+                                                    "Added to favorites"
+                                                else
+                                                    "Removed from favorites",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    navController.navigate("artistDetail/${artist.id}") {
+                                        popUpTo("search") { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
     }
 }
-
-
-
 
 @Composable
 fun ArtistDetailScreen(
@@ -867,9 +898,8 @@ private fun GeneCard(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
             Spacer(Modifier.height(4.dp))
-            MarkdownMathText(
-                markdown = gene.description.orEmpty(),
-                modifier = Modifier.padding(horizontal = 16.dp)
+            LatexFixer(
+                description = gene.description.orEmpty(),
             )
             Spacer(Modifier.weight(1f))
         }
@@ -1737,53 +1767,47 @@ private fun computeRelativeTime(then: Instant, now: Instant): String {
 
 
 @Composable
-fun MarkdownMathText(
-    markdown: String,
-    modifier: Modifier = Modifier
-) {
-    AndroidView(
-        factory = { ctx ->
-            TextView(ctx).apply {
-                movementMethod = LinkMovementMethod.getInstance()
-                linksClickable  = true
-                setTextIsSelectable(true)
-            }
-        },
-        update = { tv ->
-            // ----- debug: print every markdown link target -----
-            val linkRegex = Regex("""\[[^]+]\(([^)]+)\)""")
-            linkRegex.findAll(markdown).forEach { match ->
-                val rawLink = match.groupValues[1]
-                val fullUrl = if (rawLink.startsWith("/")) {
-                    "https://www.artsy.net$rawLink"
-                } else rawLink
-                Log.d("MarkdownLink", "extracted: $rawLink → full: $fullUrl")
+fun LatexFixer(description: String, modifier: Modifier = Modifier) {
+    val uriH = LocalUriHandler.current
+    val aString = buildAnnotatedString {
+        val regex = Regex("""\[(.*?)\]\((.*?)\)""")
+        var lIdx = 0
+        for (i in regex.findAll(description)) {
+            val r = i.range
+            val label = i.groupValues[1]
+            val ogUrl = i.groupValues[2]
+            val completeUrl = "https://www.artsy.net$ogUrl"
+
+            if (r.first > lIdx) {
+                append(description.substring(lIdx, r.first))
             }
 
-            val markwon = Markwon.builder(tv.context)
-                .usePlugin(CorePlugin.create())
-                .usePlugin(MarkwonInlineParserPlugin.create())
-                .usePlugin(JLatexMathPlugin.create(tv.textSize) { cfg ->
-                    cfg.inlinesEnabled(true)
-                })
-                .usePlugin(LinkifyPlugin.create())
-                .usePlugin(object : AbstractMarkwonPlugin() {
-                    override fun configureConfiguration(builder: MarkwonConfiguration.Builder) {
-                        builder.linkResolver { view, link ->
-                            val full = if (link.startsWith("/")) {
-                                "https://www.artsy.net$link"
-                            } else link
-                            view.context.startActivity(
-                                Intent(Intent.ACTION_VIEW, full.toUri())
-                            )
-                        }
-                    }
-                })
-                .build()
+            pushStringAnnotation(tag = "URL", annotation = completeUrl)
+            withStyle(style = SpanStyle(
+                color = MaterialTheme.colorScheme.primary,
+                textDecoration = TextDecoration.Underline
+            )) {
+                append(label)
+            }
+            pop()
 
-            markwon.setMarkdown(tv, markdown)
-        },
+            lIdx = r.last + 1
+        }
+
+        if (lIdx < description.length) {
+            append(description.substring(lIdx))
+        }
+    }
+
+    ClickableText(
+        text = aString,
+        style = MaterialTheme.typography.bodyMedium,
         modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        onClick = { offset ->
+            aString.getStringAnnotations("URL", offset, offset)
+                .firstOrNull()?.let { uriH.openUri(it.item) }
+        }
     )
 }
-
